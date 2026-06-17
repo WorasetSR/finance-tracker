@@ -12,10 +12,11 @@
 
 /* ── DESIGN TOKENS ───────────────────────────────────────── */
 :root {
-  --primary:        #0D9488;
-  --primary-light:  #14B8A6;
-  --primary-50:     #F0FDFA;
-  --primary-100:    #CCFBF1;
+  --primary:        #18181B;
+  --primary-light:  #3F3F46;
+  --primary-50:     #FAFAFA;
+  --primary-100:    #F4F4F5;
+  --primary-shadow: rgba(0,0,0,0.35);
 
   --bg:             #FAFAF9;
   --bg-card:        #FFFFFF;
@@ -403,7 +404,7 @@ img  { display: block; max-width: 100%; }
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.45);
+  box-shadow: 0 4px 14px var(--primary-shadow);
   transition: background var(--transition), transform 0.1s;
   flex-shrink: 0;
   margin-top: -14px;

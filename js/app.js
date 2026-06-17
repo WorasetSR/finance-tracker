@@ -54,14 +54,15 @@ applyFont(localStorage.getItem(FONT_KEY) || 'dm-sans');
 // ── Theme picker ──────────────────────────────────────────────
 
 const THEMES = [
-  { id:'teal',   name:'Teal',   color:'#0D9488', light:'#14B8A6', p600:'#0F766E', p700:'#115E59', p50:'#F0FDFA', p100:'#CCFBF1', p50dk:'#082420' },
-  { id:'indigo', name:'Indigo', color:'#6366F1', light:'#818CF8', p600:'#4F46E5', p700:'#4338CA', p50:'#EEF2FF', p100:'#C7D2FE', p50dk:'#1a1c4e' },
-  { id:'violet', name:'Violet', color:'#8B5CF6', light:'#A78BFA', p600:'#7C3AED', p700:'#6D28D9', p50:'#F5F3FF', p100:'#DDD6FE', p50dk:'#1e1044' },
-  { id:'rose',   name:'Rose',   color:'#F43F5E', light:'#FB7185', p600:'#E11D48', p700:'#BE123C', p50:'#FFF1F2', p100:'#FFE4E6', p50dk:'#350d15' },
-  { id:'amber',  name:'Amber',  color:'#F59E0B', light:'#FCD34D', p600:'#D97706', p700:'#B45309', p50:'#FFFBEB', p100:'#FDE68A', p50dk:'#2c1c00' },
-  { id:'blue',   name:'Blue',   color:'#3B82F6', light:'#60A5FA', p600:'#2563EB', p700:'#1D4ED8', p50:'#EFF6FF', p100:'#BFDBFE', p50dk:'#0a1e40' },
-  { id:'green',  name:'Green',  color:'#22C55E', light:'#4ADE80', p600:'#16A34A', p700:'#15803D', p50:'#F0FDF4', p100:'#BBF7D0', p50dk:'#082612' },
-  { id:'slate',  name:'Slate',  color:'#64748B', light:'#94A3B8', p600:'#475569', p700:'#334155', p50:'#F8FAFC', p100:'#E2E8F0', p50dk:'#141a24' },
+  { id:'mono',   name:'Mono',   color:'#18181B', light:'#3F3F46', p600:'#09090B', p700:'#09090B', p50:'#FAFAFA', p100:'#F4F4F5', p50dk:'#1a1a1f', shadow:'rgba(0,0,0,0.35)'   },
+  { id:'teal',   name:'Teal',   color:'#0D9488', light:'#14B8A6', p600:'#0F766E', p700:'#115E59', p50:'#F0FDFA', p100:'#CCFBF1', p50dk:'#082420', shadow:'rgba(13,148,136,0.45)'  },
+  { id:'indigo', name:'Indigo', color:'#6366F1', light:'#818CF8', p600:'#4F46E5', p700:'#4338CA', p50:'#EEF2FF', p100:'#C7D2FE', p50dk:'#1a1c4e', shadow:'rgba(99,102,241,0.45)'  },
+  { id:'violet', name:'Violet', color:'#8B5CF6', light:'#A78BFA', p600:'#7C3AED', p700:'#6D28D9', p50:'#F5F3FF', p100:'#DDD6FE', p50dk:'#1e1044', shadow:'rgba(139,92,246,0.45)'  },
+  { id:'rose',   name:'Rose',   color:'#F43F5E', light:'#FB7185', p600:'#E11D48', p700:'#BE123C', p50:'#FFF1F2', p100:'#FFE4E6', p50dk:'#350d15', shadow:'rgba(244,63,94,0.45)'   },
+  { id:'amber',  name:'Amber',  color:'#F59E0B', light:'#FCD34D', p600:'#D97706', p700:'#B45309', p50:'#FFFBEB', p100:'#FDE68A', p50dk:'#2c1c00', shadow:'rgba(245,158,11,0.45)'  },
+  { id:'blue',   name:'Blue',   color:'#3B82F6', light:'#60A5FA', p600:'#2563EB', p700:'#1D4ED8', p50:'#EFF6FF', p100:'#BFDBFE', p50dk:'#0a1e40', shadow:'rgba(59,130,246,0.45)'  },
+  { id:'green',  name:'Green',  color:'#22C55E', light:'#4ADE80', p600:'#16A34A', p700:'#15803D', p50:'#F0FDF4', p100:'#BBF7D0', p50dk:'#082612', shadow:'rgba(34,197,94,0.45)'   },
+  { id:'slate',  name:'Slate',  color:'#64748B', light:'#94A3B8', p600:'#475569', p700:'#334155', p50:'#F8FAFC', p100:'#E2E8F0', p50dk:'#141a24', shadow:'rgba(100,116,139,0.35)' },
 ];
 
 const THEME_KEY = 'ft_theme';
@@ -71,12 +72,13 @@ function applyTheme(themeId) {
   const theme  = THEMES.find(t => t.id === themeId) || THEMES[0];
   const isDark = document.documentElement.dataset.theme === 'dark';
   const r = document.documentElement.style;
-  r.setProperty('--primary',       theme.color);
-  r.setProperty('--primary-light', theme.light);
-  r.setProperty('--primary-600',   theme.p600);
-  r.setProperty('--primary-700',   theme.p700);
-  r.setProperty('--primary-50',    isDark ? theme.p50dk : theme.p50);
-  r.setProperty('--primary-100',   theme.p100);
+  r.setProperty('--primary',        theme.color);
+  r.setProperty('--primary-light',  theme.light);
+  r.setProperty('--primary-600',    theme.p600);
+  r.setProperty('--primary-700',    theme.p700);
+  r.setProperty('--primary-50',     isDark ? theme.p50dk : theme.p50);
+  r.setProperty('--primary-100',    theme.p100);
+  r.setProperty('--primary-shadow', theme.shadow);
   localStorage.setItem(THEME_KEY, theme.id);
 }
 
@@ -89,7 +91,7 @@ function applyDarkMode(isDark) {
 // Apply on boot — dark mode first so applyTheme reads correct data-theme
 const _bootDark = localStorage.getItem(DARK_KEY) === '1';
 document.documentElement.setAttribute('data-theme', _bootDark ? 'dark' : 'light');
-applyTheme(localStorage.getItem(THEME_KEY) || 'teal');
+applyTheme(localStorage.getItem(THEME_KEY) || 'mono');
 
 let currentPage    = 'dashboard';
 let pageCleanup    = null;   // cleanup fn returned by page init
