@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ── SETUP SCREEN ──────────────────────────────────────── -->
+<div id="setup-screen" class="hidden">
+  <div class="setup-card">
+    <div class="setup-logo">
+      <svg class="setup-logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#0D9488"/>
+        <path d="M7 22 L11 16 L15 19 L20 11 L25 15" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span class="setup-logo-text">Finance</span>
+    </div>
+    <h1 class="setup-title">ตั้งค่า GitHub Sync</h1>
+    <p class="setup-subtitle">เชื่อมต่อ GitHub repository เพื่อบันทึกข้อมูลของคุณบนคลาวด์อย่างปลอดภัย</p>
+    <div id="setup-error" class="error-banner hidden">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="setup-error-msg">เกิดข้อผิดพลาด กรุณาตรวจสอบข้อมูลอีกครั้ง</span>
+    </div>
+    <form id="setup-form" autocomplete="off">
+      <div class="field">
+        <label for="setup-owner">Repository Owner</label>
+        <input id="setup-owner" type="text" placeholder="username หรือ org-name" required />
+      </div>
+      <div class="field">
+        <label for="setup-repo">Repository Name</label>
+        <input id="setup-repo" type="text" placeholder="finance-data" required />
+      </div>
+      <div class="field">
+        <label for="setup-branch">Branch</label>
+        <input id="setup-branch" type="text" placeholder="main" value="main" required />
+      </div>
+      <div class="field">
+        <label for="setup-token">Personal Access Token</label>
+        <input id="setup-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" required />
+      </div>
+      <button type="submit" id="setup-submit" class="btn-primary btn-full">เชื่อมต่อและเริ่มต้น</button>
+    </form>
+    <button id="setup-skip" class="btn-skip">ข้ามการตั้งค่า — ใช้งานแบบ local เท่านั้น</button>
+  </div>
+</div>
+
+<!-- ── MAIN APP ───────────────────────────────────────────── -->
+<div id="main-app" class="hidden">
+
+  <!-- SIDEBAR (desktop) -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <svg class="sidebar-logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#0D9488"/>
+        <path d="M7 22 L11 16 L15 19 L20 11 L25 15" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span>Finance</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-link active" data-page="dashboard">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+        Dashboard
+      </a>
+      <a href="#" class="nav-link" data-page="transactions">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+          <rect x="9" y="3" width="6" height="4" rx="1"/>
+          <line x1="9" y1="12" x2="15" y2="12"/>
+          <line x1="9" y1="16" x2="13" y2="16"/>
+        </svg>
+        รายการ
+      </a>
+      <a href="#" class="nav-link" data-page="budget">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4l3 3"/>
+        </svg>
+        งบประมาณ
+      </a>
+      <a href="#" class="nav-link" data-page="analytics">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          <polyline points="16 7 22 7 22 13"/>
+        </svg>
+        วิเคราะห์
+      </a>
+      <a href="#" class="nav-link" data-page="accounts">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+          <line x1="1" y1="10" x2="23" y2="10"/>
+        </svg>
+        บัญชี
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <!-- Sync Status Widget -->
+      <div id="sync-widget" class="sync-widget">
+        <span class="sync-dot synced" id="sync-dot"></span>
+        <span class="sync-label" id="sync-label">พร้อมใช้งาน</span>
+        <button class="sync-btn" id="btn-sync">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"/>
+            <polyline points="23 20 23 14 17 14"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+          Sync
+        </button>
+      </div>
+
+      <a href="#" class="nav-link" data-page="settings">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        ตั้งค่า
+      </a>
+    </div>
+  </aside>
+
+  <!-- TOPBAR (mobile only) -->
+  <header class="topbar" id="main-topbar">
+    <span class="topbar-title" id="topbar-title">Dashboard</span>
+    <div class="topbar-right">
+      <button class="topbar-sync-btn" id="topbar-btn-sync" aria-label="Sync">
+        <span class="sync-dot synced" id="topbar-sync-dot"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"/>
+          <polyline points="23 20 23 14 17 14"/>
+          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+        </svg>
+      </button>
+      <button class="topbar-settings-btn" id="topbar-btn-settings" aria-label="ตั้งค่า">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT (JS fills this) -->
+  <main id="page-content"></main>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="bottom-nav">
+    <a href="#" class="bnav-item active" data-page="dashboard">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span>หน้าหลัก</span>
+    </a>
+    <a href="#" class="bnav-item" data-page="transactions">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+        <rect x="9" y="3" width="6" height="4" rx="1"/>
+        <line x1="9" y1="12" x2="15" y2="12"/>
+        <line x1="9" y1="16" x2="13" y2="16"/>
+      </svg>
+      <span>รายการ</span>
+    </a>
+    <!-- Center FAB -->
+    <button class="bnav-fab" id="btn-add-tx-fab" aria-label="เพิ่มรายการ">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+    <a href="#" class="bnav-item" data-page="budget">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4l3 3"/>
+      </svg>
+      <span>งบ</span>
+    </a>
+    <a href="#" class="bnav-item" data-page="analytics">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+        <polyline points="16 7 22 7 22 13"/>
+      </svg>
+      <span>วิเคราะห์</span>
+    </a>
+  </nav>
+
+</div>
+
+<!-- ── MODAL: ADD / EDIT TRANSACTION ────────────────────── -->
+<div id="tx-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="tx-modal-title">เพิ่มรายการ</h2>
+      <button class="modal-close" data-close="tx-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Type Tabs -->
+      <div class="type-tabs" id="tx-type-tabs">
+        <button class="type-tab active" data-type="expense">รายจ่าย</button>
+        <button class="type-tab" data-type="income">รายรับ</button>
+        <button class="type-tab" data-type="transfer">โอน</button>
+      </div>
+      <form id="tx-form" autocomplete="off">
+        <input type="hidden" id="tx-id" />
+        <!-- Amount -->
+        <div class="field">
+          <label for="tx-amount">จำนวน (฿)</label>
+          <input type="number" id="tx-amount" class="mono-input" placeholder="0.00" min="0" step="any" required />
+        </div>
+        <!-- Date -->
+        <div class="field">
+          <label for="tx-date">วันที่</label>
+          <input type="date" id="tx-date" required />
+        </div>
+        <!-- Account (expense/income) -->
+        <div class="field" id="grp-account">
+          <label for="tx-account">บัญชี</label>
+          <select id="tx-account" required></select>
+        </div>
+        <!-- Transfer: From Account -->
+        <div class="field hidden" id="grp-from-account">
+          <label for="tx-from-account">จากบัญชี</label>
+          <select id="tx-from-account"></select>
+        </div>
+        <!-- Transfer: To Account -->
+        <div class="field hidden" id="grp-to-account">
+          <label for="tx-to-account">ไปบัญชี</label>
+          <select id="tx-to-account"></select>
+        </div>
+        <!-- Category (hidden for transfer) -->
+        <div class="field" id="grp-category">
+          <label for="tx-category">หมวดหมู่</label>
+          <select id="tx-category"></select>
+        </div>
+        <!-- Note -->
+        <div class="field">
+          <label for="tx-note">โน้ต</label>
+          <input type="text" id="tx-note" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-tx" class="btn-danger hidden">ลบรายการ</button>
+          <div class="modal-actions-right">
+            <button type="button" class="btn-ghost" data-close="tx-modal">ยกเลิก</button>
+            <button type="submit" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: ADD / EDIT ACCOUNT ────────────────────────── -->
+<div id="account-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="account-modal-title">เพิ่มบัญชี</h2>
+      <button class="modal-close" data-close="account-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="account-form" autocomplete="off">
+        <input type="hidden" id="account-id" />
+        <div class="field">
+          <label for="account-name">ชื่อบัญชี</label>
+          <input type="text" id="account-name" placeholder="เช่น SCB, กสิกร, เงินสด" required />
+        </div>
+        <div class="field">
+          <label for="account-balance">ยอดเริ่มต้น (฿)</label>
+          <input type="number" id="account-balance" class="mono-input" placeholder="0.00" value="0" step="any" />
+        </div>
+        <div class="field">
+          <label>ไอคอน</label>
+          <div class="icon-picker" id="account-icon-picker">
+            <span class="icon-opt selected" data-icon="💳">💳</span>
+            <span class="icon-opt" data-icon="🏦">🏦</span>
+            <span class="icon-opt" data-icon="💵">💵</span>
+            <span class="icon-opt" data-icon="👛">👛</span>
+            <span class="icon-opt" data-icon="📱">📱</span>
+            <span class="icon-opt" data-icon="💎">💎</span>
+            <span class="icon-opt" data-icon="🏠">🏠</span>
+            <span class="icon-opt" data-icon="💰">💰</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="account-hidden-check" />
+            <span>ซ่อนจาก Dashboard</span>
+            <span class="field-hint">เช่น บัญชีเงินออม</span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-account" class="btn-danger hidden">ลบบัญชี</button>
+          <div class="modal-actions-right">
+            <button type="button" class="btn-ghost" data-close="account-modal">ยกเลิก</button>
+            <button type="submit" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: ADD / EDIT CATEGORY ───────────────────────── -->
+<div id="category-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="category-modal-title">เพิ่มหมวดหมู่</h2>
+      <button class="modal-close" data-close="category-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="category-form" autocomplete="off">
+        <input type="hidden" id="category-id" />
+        <div class="field">
+          <label for="category-name">ชื่อหมวดหมู่</label>
+          <input type="text" id="category-name" placeholder="เช่น อาหาร, เดินทาง, เงินเดือน" required />
+        </div>
+        <div class="field">
+          <label>ไอคอน</label>
+          <div class="icon-picker" id="category-icon-picker">
+            <span class="icon-opt selected" data-icon="🍔">🍔</span>
+            <span class="icon-opt" data-icon="🚗">🚗</span>
+            <span class="icon-opt" data-icon="🛍️">🛍️</span>
+            <span class="icon-opt" data-icon="💊">💊</span>
+            <span class="icon-opt" data-icon="📦">📦</span>
+            <span class="icon-opt" data-icon="🎮">🎮</span>
+            <span class="icon-opt" data-icon="✈️">✈️</span>
+            <span class="icon-opt" data-icon="🏠">🏠</span>
+            <span class="icon-opt" data-icon="📚">📚</span>
+            <span class="icon-opt" data-icon="💡">💡</span>
+            <span class="icon-opt" data-icon="🎵">🎵</span>
+            <span class="icon-opt" data-icon="🏋️">🏋️</span>
+            <span class="icon-opt" data-icon="☕">☕</span>
+            <span class="icon-opt" data-icon="🐶">🐶</span>
+            <span class="icon-opt" data-icon="💼">💼</span>
+            <span class="icon-opt" data-icon="🎁">🎁</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>ประเภท</label>
+          <div class="radio-group" id="category-type-group">
+            <label class="radio-label">
+              <input type="radio" name="cat-type" value="expense" checked />
+              <span>รายจ่าย</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="cat-type" value="income" />
+              <span>รายรับ</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-category" class="btn-danger hidden">ลบหมวด</button>
+          <div class="modal-actions-right">
+            <button type="button" class="btn-ghost" data-close="category-modal">ยกเลิก</button>
+            <button type="submit" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: SET BUDGET ─────────────────────────────────── -->
+<div id="budget-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="budget-modal-title">ตั้งงบประมาณ</h2>
+      <button class="modal-close" data-close="budget-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="budget-form" autocomplete="off">
+        <input type="hidden" id="budget-id" />
+        <div class="field">
+          <label for="budget-category">หมวดหมู่</label>
+          <select id="budget-category" required></select>
+        </div>
+        <div class="field">
+          <label for="budget-month">เดือน</label>
+          <input type="month" id="budget-month" required />
+        </div>
+        <div class="field">
+          <label for="budget-limit">วงเงิน (฿)</label>
+          <input type="number" id="budget-limit" class="mono-input" placeholder="0.00" min="0" step="any" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-budget" class="btn-danger hidden">ลบงบประมาณ</button>
+          <div class="modal-actions-right">
+            <button type="button" class="btn-ghost" data-close="budget-modal">ยกเลิก</button>
+            <button type="submit" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: CONFIRM ────────────────────────────────────── -->
+<div id="confirm-modal" class="modal-overlay hidden">
+  <div class="modal modal-xs">
+    <div class="modal-header">
+      <h2 id="confirm-title">ยืนยันการดำเนินการ</h2>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-message" class="confirm-message">คุณแน่ใจหรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้</p>
+      <div class="modal-actions" style="border-top:none; padding-top:0; margin-top:20px;">
+        <div class="modal-actions-right">
+          <button type="button" id="confirm-cancel" class="btn-ghost">ยกเลิก</button>
+          <button type="button" id="confirm-ok" class="btn-danger">ยืนยัน</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST CONTAINER ───────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
