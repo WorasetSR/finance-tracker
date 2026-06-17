@@ -121,6 +121,12 @@ export class LocalStore {
     return this._req(tx.objectStore(store).getAll());
   }
 
+  async clearStore(storeName) {
+    const tx = this._tx(storeName, 'readwrite');
+    await this._req(tx.objectStore(storeName).clear());
+    await this._txDone(tx);
+  }
+
   /**
    * Get a single record by id (may be deleted).
    * @param {string} store

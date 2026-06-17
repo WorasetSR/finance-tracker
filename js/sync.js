@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 //  sync.js — GitHub Contents API sync layer
-//  Finance Tracker v2
+//  Strategy: push-all (upload snapshot) / pull-all (replace local)
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -13,9 +13,9 @@ import {
 const GITHUB_API = 'https://api.github.com';
 
 export class GitHubSync {
+
   // ── Internal helpers ────────────────────────────────────────
 
-  /** Build required request headers. Throws if not configured. */
   _headers() {
     const cfg = getConfig();
     if (!cfg) throw new Error('GitHub sync is not configured');
@@ -26,35 +26,23 @@ export class GitHubSync {
     };
   }
 
-  /** Return config, throwing if not configured. */
   _cfg() {
     const cfg = getConfig();
     if (!cfg) throw new Error('GitHub sync is not configured');
     return cfg;
   }
 
-  /**
-   * Encode a JS value to Base64 (UTF-8 safe).
-   * GitHub Contents API requires Base64-encoded content.
-   */
   _b64encode(obj) {
-    // JSON → UTF-8 bytes → base64
     const json = JSON.stringify(obj, null, 2);
-    // encodeURIComponent escapes all non-ASCII, unescape converts %XX → byte chars
     return btoa(unescape(encodeURIComponent(json)));
   }
 
-  /** Decode Base64 content from GitHub API response (removes line breaks first). */
   _b64decode(b64) {
     return JSON.parse(decodeURIComponent(escape(atob(b64.replace(/\n/g, '')))));
   }
 
   // ── Public API ─────────────────────────────────────────────
 
-  /**
-   * Verify the GitHub connection by fetching repo metadata.
-   * @returns {Promise<{ok: boolean, error?: string}>}
-   */
   async testConnection() {
     try {
       const { owner, repo } = this._cfg();
@@ -69,11 +57,6 @@ export class GitHubSync {
     }
   }
 
-  /**
-   * Read and parse a JSON file from the repository.
-   * @param {string} path — e.g. "data/transactions/2026-06.json"
-   * @returns {Promise<{content: any, sha: string}|null>} null if file does not exist
-   */
   async readFile(path) {
     try {
       const { owner, repo, branch } = this._cfg();
@@ -87,25 +70,13 @@ export class GitHubSync {
       }
 
       const data = await res.json();
-      return {
-        content: this._b64decode(data.content),
-        sha:     data.sha,
-      };
+      return { content: this._b64decode(data.content), sha: data.sha };
     } catch (err) {
       if (err.message === 'HTTP 404') return null;
       throw err;
     }
   }
 
-  /**
-   * Create or update a JSON file in the repository.
-   *
-   * @param {string}      path     — repository path
-   * @param {any}         content  — value to serialize as JSON
-   * @param {string|null} sha      — current file SHA (required for updates, null for create)
-   * @param {string}      [message] — commit message
-   * @returns {Promise<{ok: boolean, sha: string|null, error: string|null}>}
-   */
   async writeFile(path, content, sha, message) {
     try {
       const { owner, repo, branch } = this._cfg();
@@ -133,25 +104,13 @@ export class GitHubSync {
     }
   }
 
-  /**
-   * Ensure the data directory structure exists in the repository.
-   * Creates accounts.json, categories.json, budgets.json, and meta.json
-   * with empty defaults if they do not already exist.
-   */
   async ensureDataStructure() {
-    const metaContent = {
-      version:   2,
-      createdAt: new Date().toISOString(),
-      months:    [],
-    };
-
     const stubs = [
       { path: 'data/accounts.json',   content: [] },
       { path: 'data/categories.json', content: [] },
       { path: 'data/budgets.json',    content: [] },
-      { path: 'data/meta.json',       content: metaContent },
+      { path: 'data/meta.json',       content: { version: 2, createdAt: new Date().toISOString(), months: [] } },
     ];
-
     for (const stub of stubs) {
       const existing = await this.readFile(stub.path);
       if (!existing) {
@@ -160,289 +119,57 @@ export class GitHubSync {
     }
   }
 
-  /**
-   * Fetch transaction data for a specific month from GitHub.
-   * @param {string} month — YYYY-MM
-   * @returns {Promise<{content: Object[], sha: string}|null>}
-   */
-  async pullMonth(month) {
-    return this.readFile(`data/transactions/${month}.json`);
+  // ── Push a single file (read SHA → write) ──────────────────
+
+  async _pushFile(path, content) {
+    const existing = await this.readFile(path);
+    const result   = await this.writeFile(path, content, existing?.sha ?? null, `Update ${path}`);
+    if (!result.ok) throw new Error(result.error ?? `Failed to write ${path}`);
   }
 
-  /**
-   * Write transaction data for a specific month to GitHub.
-   * @param {string}   month        — YYYY-MM
-   * @param {Object[]} transactions — array of transaction objects
-   * @param {string|null} sha       — current file SHA (null to create)
-   * @returns {Promise<{ok: boolean, sha: string|null, error: string|null}>}
-   */
-  async pushMonth(month, transactions, sha) {
-    return this.writeFile(
-      `data/transactions/${month}.json`,
-      transactions,
-      sha,
-      `Update transactions ${month}`
-    );
-  }
-
-  // ── Merge logic ────────────────────────────────────────────
+  // ── Sync All = Upload current local snapshot to GitHub ──────
 
   /**
-   * Merge pending local operations on top of remote transaction array.
-   * Strategy: last-write-wins for edits; soft-deletes are always applied.
-   *
-   * @param {Object[]} remote  — records fetched from GitHub
-   * @param {Object[]} pending — local pending ops from sync_queue
-   * @returns {Object[]}
-   */
-  _mergeTransactions(remote, pending) {
-    /** @type {Map<string, Object>} */
-    const map = new Map((remote ?? []).map(t => [t.id, t]));
-
-    for (const op of pending) {
-      if (op.pendingOp === 'create' || op.pendingOp === 'update') {
-        const existing = map.get(op.id);
-        // Accept local change when there's no remote copy, or local is newer
-        if (!existing || op.updatedAt >= existing.updatedAt) {
-          map.set(op.id, { ...op, synced: true, pendingOp: null });
-        }
-      } else if (op.pendingOp === 'delete') {
-        const existing = map.get(op.id);
-        if (existing) {
-          // Preserve remote data but stamp deletedAt
-          map.set(op.id, {
-            ...existing,
-            deletedAt: op.deletedAt,
-            updatedAt: op.deletedAt,
-            synced:    true,
-            pendingOp: null,
-          });
-        } else {
-          // Record never existed remotely — still persist the tombstone
-          map.set(op.id, { ...op, synced: true, pendingOp: null });
-        }
-      }
-    }
-
-    return Array.from(map.values());
-  }
-
-  // ── Sync orchestration ─────────────────────────────────────
-
-  /**
-   * Attempt to sync a single month: pull → merge → push.
-   * @private
-   * @returns {Promise<{ok: boolean, conflict?: boolean, error?: string}>}
-   */
-  async _syncMonth(store, month, pending) {
-    const remote     = await this.pullMonth(month);
-    const remoteData = remote?.content ?? [];
-    const remoteSha  = remote?.sha     ?? null;
-
-    const merged = this._mergeTransactions(remoteData, pending);
-    const result = await this.pushMonth(month, merged, remoteSha);
-
-    if (!result.ok) {
-      // GitHub returns 409 Conflict or 422 Unprocessable for SHA mismatches
-      const isConflict =
-        result.error?.includes('409') ||
-        result.error?.toLowerCase().includes('conflict') ||
-        result.error?.includes('does not match');
-      return { ok: false, error: result.error, conflict: !!isConflict };
-    }
-
-    return { ok: true };
-  }
-
-  /**
-   * Full bidirectional sync.
-   * For each month that has pending operations:
-   *   1. Pull remote data
-   *   2. Merge local pending ops (last-write-wins)
-   *   3. Push merged result
-   *   4. Mark pending items as synced
-   * On SHA conflict: retry once after a fresh pull; set state to 'conflict' on second failure.
+   * Push the complete local state to GitHub.
+   * Only non-deleted records are pushed — deletions are implicit (absent from snapshot).
+   * Other devices get the deletion when they pull.
    *
    * @param {import('./local-store.js').LocalStore} store
-   * @returns {Promise<{ok: boolean, synced?: number, error?: string, conflict?: boolean}>}
+   * @returns {Promise<{ok: boolean, error?: string}>}
    */
   async syncAll(store) {
     try {
       setSyncState('pending');
 
-      const queue = await store.getPendingQueue();
-      let totalSynced = 0;
+      const [accounts, categories, budgets, allTx] = await Promise.all([
+        store.getAll('accounts'),
+        store.getAll('categories'),
+        store.getAll('budgets'),
+        store.getAll('transactions'),
+      ]);
 
-      if (queue.length === 0) {
-        // No transactions pending — still sync static collections bidirectionally
-        await this._syncStaticCollections(store).catch(err => {
-          console.warn('[sync] static collections sync failed (non-critical):', err.message);
-        });
-        setLastSync(new Date().toISOString());
-        setSyncState('synced');
-        return { ok: true, synced: 0 };
-      }
-
-      // Group pending operations by month — fetch full records from store
-      // (queue entries only contain {id, store, op}; full data lives in the store)
+      // Group non-deleted transactions by month
       const byMonth = new Map();
-      for (const op of queue) {
-        const storeName = op.store || 'transactions';
-        const record = await store.get(storeName, op.id);
-        if (!record) continue;
-        const month = record.date?.slice(0, 7);
+      for (const tx of allTx) {
+        const month = tx.date?.slice(0, 7);
         if (!month) continue;
         if (!byMonth.has(month)) byMonth.set(month, []);
-        byMonth.get(month).push(record);
+        byMonth.get(month).push(tx);
       }
 
-      for (const [month, monthPending] of byMonth) {
-        // First attempt
-        let result = await this._syncMonth(store, month, monthPending);
+      // Push static collections
+      await this._pushFile('data/accounts.json',   accounts);
+      await this._pushFile('data/categories.json', categories);
+      await this._pushFile('data/budgets.json',    budgets);
 
-        // Retry once on conflict (SHA changed between our pull and push)
-        if (!result.ok && result.conflict) {
-          result = await this._syncMonth(store, month, monthPending);
-        }
-
-        if (result.ok) {
-          // Commit success: mark records as synced and clear queue entries
-          for (const op of monthPending) {
-            const record = await store.get('transactions', op.id);
-            if (record) {
-              record.synced    = true;
-              record.pendingOp = null;
-              await store.put('transactions', record);
-            }
-            await store.clearPendingItem(op.id);
-          }
-          totalSynced += monthPending.length;
-        } else if (result.conflict) {
-          setSyncState('conflict');
-          return { ok: false, error: 'Sync conflict after retry — manual resolution required', conflict: true };
-        } else {
-          setSyncState('error');
-          return { ok: false, error: result.error };
-        }
+      // Push each month's transactions
+      for (const [month, txs] of byMonth) {
+        await this._pushFile(`data/transactions/${month}.json`, txs);
       }
 
-      // Sync accounts, categories, budgets — bidirectional, best-effort
-      await this._syncStaticCollections(store).catch(err => {
-        console.warn('[sync] static collections sync failed (non-critical):', err.message);
-      });
-
-      setLastSync(new Date().toISOString());
-      setSyncState('synced');
-      return { ok: true, synced: totalSynced };
-    } catch (err) {
-      setSyncState('error');
-      return { ok: false, error: err.message };
-    }
-  }
-
-  /**
-   * Bidirectional sync for accounts, categories, budgets.
-   * Pull remote → merge (last-write-wins by updatedAt) → push merged → update local.
-   * @private
-   */
-  async _syncStaticCollections(store) {
-    const specs = [
-      { path: 'data/accounts.json',   getLocal: () => store.getAllRaw('accounts'),   put: i => store.put('accounts', i)   },
-      { path: 'data/categories.json', getLocal: () => store.getAllRaw('categories'), put: i => store.put('categories', i) },
-      { path: 'data/budgets.json',    getLocal: () => store.getAllRaw('budgets'),    put: i => store.put('budgets', i)    },
-    ];
-
-    for (const spec of specs) {
-      try {
-        const [localArr, remoteFile] = await Promise.all([
-          spec.getLocal(),
-          this.readFile(spec.path),
-        ]);
-
-        const remoteArr = remoteFile?.content ?? [];
-        const sha       = remoteFile?.sha     ?? null;
-
-        // Merge including deleted records so deletions propagate across devices
-        const merged   = this._mergeById(localArr, remoteArr);
-        const localMap = new Map(localArr.map(i => [i.id, i]));
-
-        // Update local with remote items that are newer (including deletions)
-        for (const item of merged) {
-          const loc = localMap.get(item.id);
-          const itemTs = item.deletedAt ?? item.updatedAt ?? '';
-          const locTs  = loc ? (loc.deletedAt ?? loc.updatedAt ?? '') : '';
-          if (!loc || itemTs > locTs) {
-            await spec.put({ ...item, synced: true });
-          }
-        }
-
-        // Push all merged records to remote (including deleted — acts as tombstone)
-        const result = await this.writeFile(spec.path, merged, sha, `Update ${spec.path}`);
-        if (!result.ok) console.warn(`[sync] ${spec.path} write failed:`, result.error);
-      } catch (err) {
-        console.warn(`[sync] could not sync ${spec.path}:`, err.message);
-      }
-    }
-  }
-
-  /** Merge two arrays by id. Last-write-wins using max(deletedAt, updatedAt). @private */
-  _mergeById(local, remote) {
-    const ts  = i => i.deletedAt ?? i.updatedAt ?? '';
-    const map = new Map();
-    for (const item of remote) map.set(item.id, item);
-    for (const item of local) {
-      const rem = map.get(item.id);
-      if (!rem || ts(item) >= ts(rem)) map.set(item.id, item);
-    }
-    return Array.from(map.values());
-  }
-
-  /**
-   * Pull ALL remote data into the local store.
-   * Used for first-time setup or manual full refresh.
-   * Discovers available months from data/transactions/ directory listing.
-   *
-   * @param {import('./local-store.js').LocalStore} store
-   * @returns {Promise<{ok: boolean, error?: string}>}
-   */
-  async pullAll(store) {
-    try {
-      setSyncState('pending');
-
-      // ── Accounts ─────────────────────────────────────────
-      const accFile = await this.readFile('data/accounts.json');
-      if (accFile?.content?.length) {
-        for (const acc of accFile.content) {
-          await store.put('accounts', { ...acc, synced: true });
-        }
-      }
-
-      // ── Categories ────────────────────────────────────────
-      const catFile = await this.readFile('data/categories.json');
-      if (catFile?.content?.length) {
-        for (const cat of catFile.content) {
-          await store.put('categories', { ...cat, synced: true });
-        }
-      }
-
-      // ── Budgets ───────────────────────────────────────────
-      const bgtFile = await this.readFile('data/budgets.json');
-      if (bgtFile?.content?.length) {
-        for (const bgt of bgtFile.content) {
-          await store.put('budgets', { ...bgt, synced: true });
-        }
-      }
-
-      // ── Transactions — discover months via directory listing ──
-      const months = await this._listTransactionMonths();
-      for (const month of months) {
-        const txFile = await this.pullMonth(month);
-        if (txFile?.content) {
-          for (const tx of txFile.content) {
-            await store.put('transactions', { ...tx, synced: true });
-          }
-        }
-      }
+      // Clear sync queue — everything is now on GitHub
+      const queue = await store.getPendingQueue();
+      for (const op of queue) await store.clearPendingItem(op.id);
 
       setLastSync(new Date().toISOString());
       setSyncState('synced');
@@ -453,12 +180,53 @@ export class GitHubSync {
     }
   }
 
+  // ── Pull All = Download GitHub snapshot, replace local ──────
+
   /**
-   * List available transaction month files by reading the data/transactions/ directory.
-   * Falls back to meta.json months list if the directory doesn't exist yet.
-   * @private
-   * @returns {Promise<string[]>} — YYYY-MM strings
+   * Download the full GitHub snapshot and replace all local data.
+   * Clears local stores first so deletions from other devices take effect.
+   *
+   * @param {import('./local-store.js').LocalStore} store
+   * @returns {Promise<{ok: boolean, error?: string}>}
    */
+  async pullAll(store) {
+    try {
+      setSyncState('pending');
+
+      // Pull everything from GitHub
+      const [accFile, catFile, bgtFile] = await Promise.all([
+        this.readFile('data/accounts.json'),
+        this.readFile('data/categories.json'),
+        this.readFile('data/budgets.json'),
+      ]);
+
+      const months  = await this._listTransactionMonths();
+      const txFiles = await Promise.all(months.map(m => this.readFile(`data/transactions/${m}.json`)));
+
+      // Replace local stores completely
+      await store.clearStore('transactions');
+      await store.clearStore('accounts');
+      await store.clearStore('categories');
+      await store.clearStore('budgets');
+      await store.clearStore('sync_queue');
+
+      for (const acc of accFile?.content ?? []) await store.put('accounts',     { ...acc, synced: true });
+      for (const cat of catFile?.content ?? []) await store.put('categories',   { ...cat, synced: true });
+      for (const bgt of bgtFile?.content ?? []) await store.put('budgets',      { ...bgt, synced: true });
+      for (const f   of txFiles)
+        for (const tx of f?.content ?? [])      await store.put('transactions', { ...tx,  synced: true });
+
+      setLastSync(new Date().toISOString());
+      setSyncState('synced');
+      return { ok: true };
+    } catch (err) {
+      setSyncState('error');
+      return { ok: false, error: err.message };
+    }
+  }
+
+  // ── List transaction months from GitHub ─────────────────────
+
   async _listTransactionMonths() {
     try {
       const { owner, repo, branch } = this._cfg();
@@ -468,15 +236,12 @@ export class GitHubSync {
       );
 
       if (res.status === 404) {
-        // Directory not created yet — fall back to meta.json
         const meta = await this.readFile('data/meta.json');
         return meta?.content?.months ?? [];
       }
-
       if (!res.ok) return [];
 
       const files = await res.json();
-      // Filter to files matching YYYY-MM.json pattern
       return files
         .filter(f => f.type === 'file' && /^\d{4}-\d{2}\.json$/.test(f.name))
         .map(f => f.name.replace('.json', ''));
