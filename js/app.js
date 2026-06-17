@@ -51,6 +51,34 @@ function applyFont(fontId) {
 // Apply saved font on boot
 applyFont(localStorage.getItem(FONT_KEY) || 'dm-sans');
 
+// ── Theme picker ──────────────────────────────────────────────
+
+const THEMES = [
+  { id: 'teal',   name: 'Teal',   color: '#0D9488', p600: '#0F766E', p700: '#115E59', p50: '#F0FDFA' },
+  { id: 'indigo', name: 'Indigo', color: '#6366F1', p600: '#4F46E5', p700: '#4338CA', p50: '#EEF2FF' },
+  { id: 'violet', name: 'Violet', color: '#8B5CF6', p600: '#7C3AED', p700: '#6D28D9', p50: '#F5F3FF' },
+  { id: 'rose',   name: 'Rose',   color: '#F43F5E', p600: '#E11D48', p700: '#BE123C', p50: '#FFF1F2' },
+  { id: 'amber',  name: 'Amber',  color: '#F59E0B', p600: '#D97706', p700: '#B45309', p50: '#FFFBEB' },
+  { id: 'blue',   name: 'Blue',   color: '#3B82F6', p600: '#2563EB', p700: '#1D4ED8', p50: '#EFF6FF' },
+  { id: 'green',  name: 'Green',  color: '#22C55E', p600: '#16A34A', p700: '#15803D', p50: '#F0FDF4' },
+  { id: 'slate',  name: 'Slate',  color: '#64748B', p600: '#475569', p700: '#334155', p50: '#F8FAFC' },
+];
+
+const THEME_KEY = 'ft_theme';
+
+function applyTheme(themeId) {
+  const theme = THEMES.find(t => t.id === themeId) || THEMES[0];
+  const r = document.documentElement.style;
+  r.setProperty('--primary',     theme.color);
+  r.setProperty('--primary-600', theme.p600);
+  r.setProperty('--primary-700', theme.p700);
+  r.setProperty('--primary-50',  theme.p50);
+  localStorage.setItem(THEME_KEY, theme.id);
+}
+
+// Apply saved theme on boot
+applyTheme(localStorage.getItem(THEME_KEY) || 'teal');
+
 let currentPage    = 'dashboard';
 let pageCleanup    = null;   // cleanup fn returned by page init
 let pendingConfirm = null;   // resolve fn for confirm modal
@@ -634,6 +662,16 @@ async function initSettings(container) {
         </form>
       </div>
       <div class="card" style="max-width:480px;margin-top:16px">
+        <h3 class="card-title">ธีมสี</h3>
+        <div class="theme-picker" id="s-theme-picker">
+          ${THEMES.map(t => `
+            <button type="button" class="theme-swatch ${(localStorage.getItem(THEME_KEY) || 'teal') === t.id ? 'selected' : ''}" data-theme-id="${t.id}" style="background:${t.color}" title="${t.name}">
+              <span class="theme-check">✓</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <div class="card" style="max-width:480px;margin-top:16px">
         <h3 class="card-title">ฟอนต์</h3>
         <div class="font-picker" id="s-font-picker">
           ${FONTS.map(f => `
@@ -667,6 +705,16 @@ async function initSettings(container) {
       token:  document.getElementById('s-token').value.trim(),
     });
     showToast('บันทึกการตั้งค่าแล้ว');
+  });
+
+  document.getElementById('s-theme-picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-theme-id]');
+    if (!btn) return;
+    const themeId = btn.dataset.themeId;
+    applyTheme(themeId);
+    document.querySelectorAll('#s-theme-picker .theme-swatch').forEach(el => {
+      el.classList.toggle('selected', el.dataset.themeId === themeId);
+    });
   });
 
   document.getElementById('s-font-picker').addEventListener('click', (e) => {
