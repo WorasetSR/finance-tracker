@@ -80,6 +80,7 @@ function applyTheme(themeId) {
   r.setProperty('--primary-100',    theme.p100);
   r.setProperty('--primary-shadow', theme.shadow);
   localStorage.setItem(THEME_KEY, theme.id);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.color);
 }
 
 function applyDarkMode(isDark) {
