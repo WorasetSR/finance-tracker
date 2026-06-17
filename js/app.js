@@ -905,6 +905,81 @@ export function showToast(message, type = 'success') {
   }, 3000);
 }
 
+// ── Calculator ────────────────────────────────────────────────
+
+let _calcTarget = null;
+let _calcExpr   = '';
+
+function calcEval(expr) {
+  try {
+    const safe = expr.replace(/×/g, '*').replace(/÷/g, '/');
+    // Only allow digits, operators, dot, parens
+    if (!/^[\d+\-*/.() ]+$/.test(safe)) return null;
+    const result = Function('"use strict"; return (' + safe + ')')();
+    return isFinite(result) ? Math.round(result * 1e8) / 1e8 : null;
+  } catch { return null; }
+}
+
+function showCalc(inputEl) {
+  _calcTarget = inputEl;
+  const raw = String(inputEl.value || '').replace(/[^0-9.]/g, '');
+  _calcExpr = raw;
+  document.getElementById('calc-label').textContent =
+    inputEl.dataset.label || 'จำนวน';
+  document.getElementById('calc-display').textContent = _calcExpr || '0';
+  document.getElementById('calc-overlay').classList.remove('hidden');
+}
+
+function hideCalc() {
+  document.getElementById('calc-overlay').classList.add('hidden');
+  _calcTarget = null;
+}
+
+document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
+  // Close on backdrop tap
+  if (e.target === document.getElementById('calc-overlay')) { hideCalc(); return; }
+
+  const btn = e.target.closest('[data-calc]');
+  if (!btn) return;
+  e.preventDefault();
+
+  const key = btn.dataset.calc;
+  const display = document.getElementById('calc-display');
+
+  if (key === '⌫') {
+    _calcExpr = _calcExpr.slice(0, -1);
+  } else if (key === '✓') {
+    const result = calcEval(_calcExpr);
+    if (_calcTarget !== null) {
+      const val = result !== null ? result : (parseFloat(_calcExpr) || 0);
+      _calcTarget.value = val;
+      _calcTarget.dispatchEvent(new Event('input',  { bubbles: true }));
+      _calcTarget.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    hideCalc();
+    return;
+  } else {
+    // Prevent double operators
+    const ops = ['+', '-', '×'];
+    if (ops.includes(key) && ops.includes(_calcExpr.slice(-1))) {
+      _calcExpr = _calcExpr.slice(0, -1) + key;
+    } else {
+      _calcExpr += key;
+    }
+  }
+
+  display.textContent = _calcExpr || '0';
+});
+
+// Intercept focus on any [data-calculator] input
+document.addEventListener('focusin', e => {
+  const input = e.target;
+  if (input.tagName === 'INPUT' && 'calculator' in input.dataset) {
+    input.blur();
+    showCalc(input);
+  }
+}, true);
+
 // ── Expose openTxModal for pages ──────────────────────────────
 
 export { openTxModal };

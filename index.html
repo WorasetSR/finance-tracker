@@ -243,7 +243,7 @@
         <!-- Amount -->
         <div class="field">
           <label for="tx-amount">จำนวน (฿)</label>
-          <input type="number" id="tx-amount" class="mono-input" placeholder="0.00" min="0" step="any" required />
+          <input type="number" id="tx-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
         </div>
         <!-- Date -->
         <div class="field">
@@ -307,7 +307,7 @@
         </div>
         <div class="field">
           <label for="account-balance">ยอดเริ่มต้น (฿)</label>
-          <input type="number" id="account-balance" class="mono-input" placeholder="0.00" value="0" step="any" />
+          <input type="number" id="account-balance" class="mono-input" placeholder="0.00" value="0" step="any" data-calculator data-label="ยอดเริ่มต้น" />
         </div>
         <div class="field">
           <label>ไอคอน</label>
@@ -429,7 +429,7 @@
         </div>
         <div class="field">
           <label for="budget-limit">วงเงิน (฿)</label>
-          <input type="number" id="budget-limit" class="mono-input" placeholder="0.00" min="0" step="any" required />
+          <input type="number" id="budget-limit" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="วงเงิน" />
         </div>
         <div class="modal-actions">
           <button type="button" id="btn-delete-budget" class="btn-danger hidden">ลบงบประมาณ</button>
@@ -457,6 +457,35 @@
           <button type="button" id="confirm-ok" class="btn-danger">ยืนยัน</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CALCULATOR ────────────────────────────────────────── -->
+<div id="calc-overlay" class="calc-overlay hidden">
+  <div class="calc-sheet">
+    <div class="calc-label" id="calc-label">จำนวน</div>
+    <div class="calc-display" id="calc-display">0</div>
+    <div class="calc-grid">
+      <button class="calc-btn" data-calc="7">7</button>
+      <button class="calc-btn" data-calc="8">8</button>
+      <button class="calc-btn" data-calc="9">9</button>
+      <button class="calc-btn calc-op" data-calc="⌫">⌫</button>
+
+      <button class="calc-btn" data-calc="4">4</button>
+      <button class="calc-btn" data-calc="5">5</button>
+      <button class="calc-btn" data-calc="6">6</button>
+      <button class="calc-btn calc-op" data-calc="×">×</button>
+
+      <button class="calc-btn" data-calc="1">1</button>
+      <button class="calc-btn" data-calc="2">2</button>
+      <button class="calc-btn" data-calc="3">3</button>
+      <button class="calc-btn calc-op" data-calc="-">−</button>
+
+      <button class="calc-btn" data-calc=".">.</button>
+      <button class="calc-btn" data-calc="0">0</button>
+      <button class="calc-btn calc-op" data-calc="+">+</button>
+      <button class="calc-btn calc-ok" data-calc="✓">✓</button>
     </div>
   </div>
 </div>
