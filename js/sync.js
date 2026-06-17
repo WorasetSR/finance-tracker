@@ -347,9 +347,9 @@ export class GitHubSync {
    */
   async _syncStaticCollections(store) {
     const specs = [
-      { path: 'data/accounts.json',   getLocal: () => store.getAll('accounts'),   put: i => store.put('accounts', i)   },
-      { path: 'data/categories.json', getLocal: () => store.getAll('categories'), put: i => store.put('categories', i) },
-      { path: 'data/budgets.json',    getLocal: () => store.getAll('budgets'),    put: i => store.put('budgets', i)    },
+      { path: 'data/accounts.json',   getLocal: () => store.getAllRaw('accounts'),   put: i => store.put('accounts', i)   },
+      { path: 'data/categories.json', getLocal: () => store.getAllRaw('categories'), put: i => store.put('categories', i) },
+      { path: 'data/budgets.json',    getLocal: () => store.getAllRaw('budgets'),    put: i => store.put('budgets', i)    },
     ];
 
     for (const spec of specs) {
@@ -362,19 +362,21 @@ export class GitHubSync {
         const remoteArr = remoteFile?.content ?? [];
         const sha       = remoteFile?.sha     ?? null;
 
-        // Merge: union by id, last-write-wins by updatedAt
+        // Merge including deleted records so deletions propagate across devices
         const merged   = this._mergeById(localArr, remoteArr);
         const localMap = new Map(localArr.map(i => [i.id, i]));
 
-        // Update local with items that are remote-only or newer in remote
+        // Update local with remote items that are newer (including deletions)
         for (const item of merged) {
           const loc = localMap.get(item.id);
-          if (!loc || (item.updatedAt ?? '') > (loc.updatedAt ?? '')) {
+          const itemTs = item.deletedAt ?? item.updatedAt ?? '';
+          const locTs  = loc ? (loc.deletedAt ?? loc.updatedAt ?? '') : '';
+          if (!loc || itemTs > locTs) {
             await spec.put({ ...item, synced: true });
           }
         }
 
-        // Push merged result to remote
+        // Push all merged records to remote (including deleted — acts as tombstone)
         const result = await this.writeFile(spec.path, merged, sha, `Update ${spec.path}`);
         if (!result.ok) console.warn(`[sync] ${spec.path} write failed:`, result.error);
       } catch (err) {
@@ -383,13 +385,14 @@ export class GitHubSync {
     }
   }
 
-  /** Merge two arrays by id, last-write-wins by updatedAt. @private */
+  /** Merge two arrays by id. Last-write-wins using max(deletedAt, updatedAt). @private */
   _mergeById(local, remote) {
+    const ts  = i => i.deletedAt ?? i.updatedAt ?? '';
     const map = new Map();
     for (const item of remote) map.set(item.id, item);
     for (const item of local) {
       const rem = map.get(item.id);
-      if (!rem || (item.updatedAt ?? '') >= (rem.updatedAt ?? '')) map.set(item.id, item);
+      if (!rem || ts(item) >= ts(rem)) map.set(item.id, item);
     }
     return Array.from(map.values());
   }

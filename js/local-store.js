@@ -116,6 +116,11 @@ export class LocalStore {
     return all.filter(r => !r.deletedAt);
   }
 
+  async getAllRaw(store) {
+    const tx = this._tx(store);
+    return this._req(tx.objectStore(store).getAll());
+  }
+
   /**
    * Get a single record by id (may be deleted).
    * @param {string} store
