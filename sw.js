@@ -1,4 +1,4 @@
-const CACHE = 'ft-v1';
+const CACHE = 'ft-v2';
 
 const SHELL = [
   './',
@@ -37,14 +37,11 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // Always use network for external APIs
-  if (url.includes('api.github.com') || url.includes('fonts.googleapis.com') ||
-      url.includes('fonts.gstatic.com') || url.includes('cdn.jsdelivr.net')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-    return;
-  }
+  // Never intercept cross-origin requests — let browser handle natively
+  // This is critical for GitHub API (PUT/GET with auth headers must not go through SW)
+  if (!url.startsWith(self.location.origin)) return;
 
-  // Network-first for app files so updates propagate immediately
+  // Network-first for same-origin app files so updates propagate immediately
   e.respondWith(
     fetch(e.request)
       .then(res => {
