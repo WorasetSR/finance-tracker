@@ -271,14 +271,20 @@ export class GitHubSync {
       setSyncState('pending');
 
       const queue = await store.getPendingQueue();
+      let totalSynced = 0;
+
       if (queue.length === 0) {
+        // No transactions pending — still sync static collections bidirectionally
+        await this._syncStaticCollections(store).catch(err => {
+          console.warn('[sync] static collections sync failed (non-critical):', err.message);
+        });
+        setLastSync(new Date().toISOString());
         setSyncState('synced');
         return { ok: true, synced: 0 };
       }
 
       // Group pending operations by month — fetch full records from store
       // (queue entries only contain {id, store, op}; full data lives in the store)
-      /** @type {Map<string, Object[]>} */
       const byMonth = new Map();
       for (const op of queue) {
         const storeName = op.store || 'transactions';
@@ -289,8 +295,6 @@ export class GitHubSync {
         if (!byMonth.has(month)) byMonth.set(month, []);
         byMonth.get(month).push(record);
       }
-
-      let totalSynced = 0;
 
       for (const [month, monthPending] of byMonth) {
         // First attempt
@@ -322,9 +326,9 @@ export class GitHubSync {
         }
       }
 
-      // Push accounts, categories, budgets — best-effort, never blocks sync result
-      await this._pushStaticCollections(store).catch(err => {
-        console.warn('[sync] static collections push failed (non-critical):', err.message);
+      // Sync accounts, categories, budgets — bidirectional, best-effort
+      await this._syncStaticCollections(store).catch(err => {
+        console.warn('[sync] static collections sync failed (non-critical):', err.message);
       });
 
       setLastSync(new Date().toISOString());
@@ -337,31 +341,57 @@ export class GitHubSync {
   }
 
   /**
-   * Push accounts, categories, and budgets to GitHub.
-   * These collections aren't tracked in sync_queue so we push them on every sync.
+   * Bidirectional sync for accounts, categories, budgets.
+   * Pull remote → merge (last-write-wins by updatedAt) → push merged → update local.
    * @private
    */
-  async _pushStaticCollections(store) {
-    const [accounts, categories, budgets] = await Promise.all([
-      store.getAccounts(),
-      store.getCategories(),
-      store.getBudgets(),
-    ]);
-
-    const files = [
-      { path: 'data/accounts.json',   content: accounts },
-      { path: 'data/categories.json', content: categories },
-      { path: 'data/budgets.json',    content: budgets },
+  async _syncStaticCollections(store) {
+    const specs = [
+      { path: 'data/accounts.json',   getLocal: () => store.getAll('accounts'),   put: i => store.put('accounts', i)   },
+      { path: 'data/categories.json', getLocal: () => store.getAll('categories'), put: i => store.put('categories', i) },
+      { path: 'data/budgets.json',    getLocal: () => store.getAll('budgets'),    put: i => store.put('budgets', i)    },
     ];
 
-    for (const file of files) {
+    for (const spec of specs) {
       try {
-        const existing = await this.readFile(file.path);
-        await this.writeFile(file.path, file.content, existing?.sha ?? null, `Update ${file.path}`);
+        const [localArr, remoteFile] = await Promise.all([
+          spec.getLocal(),
+          this.readFile(spec.path),
+        ]);
+
+        const remoteArr = remoteFile?.content ?? [];
+        const sha       = remoteFile?.sha     ?? null;
+
+        // Merge: union by id, last-write-wins by updatedAt
+        const merged   = this._mergeById(localArr, remoteArr);
+        const localMap = new Map(localArr.map(i => [i.id, i]));
+
+        // Update local with items that are remote-only or newer in remote
+        for (const item of merged) {
+          const loc = localMap.get(item.id);
+          if (!loc || (item.updatedAt ?? '') > (loc.updatedAt ?? '')) {
+            await spec.put({ ...item, synced: true });
+          }
+        }
+
+        // Push merged result to remote
+        const result = await this.writeFile(spec.path, merged, sha, `Update ${spec.path}`);
+        if (!result.ok) console.warn(`[sync] ${spec.path} write failed:`, result.error);
       } catch (err) {
-        console.warn(`[sync] could not push ${file.path}:`, err.message);
+        console.warn(`[sync] could not sync ${spec.path}:`, err.message);
       }
     }
+  }
+
+  /** Merge two arrays by id, last-write-wins by updatedAt. @private */
+  _mergeById(local, remote) {
+    const map = new Map();
+    for (const item of remote) map.set(item.id, item);
+    for (const item of local) {
+      const rem = map.get(item.id);
+      if (!rem || (item.updatedAt ?? '') >= (rem.updatedAt ?? '')) map.set(item.id, item);
+    }
+    return Array.from(map.values());
   }
 
   /**
