@@ -330,7 +330,10 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button type="button" id="btn-delete-account" class="btn-danger hidden">ลบบัญชี</button>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="btn-delete-account" class="btn-danger hidden">ลบบัญชี</button>
+            <button type="button" id="btn-archive-account" class="btn-archive hidden">จัดเก็บ</button>
+          </div>
           <div class="modal-actions-right">
             <button type="button" class="btn-ghost" data-close="account-modal">ยกเลิก</button>
             <button type="submit" class="btn-primary">บันทึก</button>
@@ -424,8 +427,15 @@
           <select id="budget-category" required></select>
         </div>
         <div class="field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="budget-no-month" />
+            <span>ใช้ทุกเดือน</span>
+            <span class="field-hint">งบประมาณนี้จะแสดงในทุกเดือน</span>
+          </label>
+        </div>
+        <div class="field" id="grp-budget-month">
           <label for="budget-month">เดือน</label>
-          <input type="month" id="budget-month" required />
+          <input type="month" id="budget-month" />
         </div>
         <div class="field">
           <label for="budget-limit">วงเงิน (฿)</label>

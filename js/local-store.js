@@ -230,14 +230,32 @@ export class LocalStore {
   }
 
   /**
-   * Budgets for a specific month (or all if month omitted).
+   * Budgets for a specific month (excludes templates where month === null).
    * @param {string} [month] — YYYY-MM
    * @returns {Promise<Object[]>}
    */
   async getBudgets(month) {
     const all = await this.getAll(STORES.BUDGETS);
-    if (!month) return all;
+    if (!month) return all.filter(b => b.month != null);
     return all.filter(b => b.month === month);
+  }
+
+  /**
+   * Budget templates — budgets not tied to any specific month (month === null).
+   * @returns {Promise<Object[]>}
+   */
+  async getBudgetTemplates() {
+    const all = await this.getAll(STORES.BUDGETS);
+    return all.filter(b => b.month == null);
+  }
+
+  /**
+   * Archived (non-deleted) accounts — accounts with archived === true.
+   * @returns {Promise<Object[]>}
+   */
+  async getArchivedAccounts() {
+    const all = await this.getAll(STORES.ACCOUNTS);
+    return all.filter(a => a.archived);
   }
 
   // ── Sync queue ─────────────────────────────────────────────

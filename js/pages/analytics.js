@@ -11,9 +11,79 @@ let pieChart    = null;
 let trendChart  = null;
 
 export async function initAnalytics(container, store) {
-  // Show 6 months ending at current
   const endMonth  = currentMonth();
   const months    = last6Months(endMonth);
+  let catMonth    = endMonth;   // Month shown in category breakdown
+
+  async function renderPieSection() {
+    const [categories, allTxs] = await Promise.all([
+      store.getCategories(),
+      store.getTransactions({}),
+    ]);
+    const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
+
+    const monthTxs = allTxs.filter(t => t.date?.startsWith(catMonth) && t.type === 'expense');
+    const catTotals = {};
+    for (const tx of monthTxs) {
+      const cat = catMap[tx.categoryId];
+      if (!cat) continue;
+      catTotals[tx.categoryId] = catTotals[tx.categoryId] || { cat, total: 0 };
+      catTotals[tx.categoryId].total += tx.amountMinor;
+    }
+    const catBreakdown = Object.values(catTotals).sort((a, b) => b.total - a.total);
+    const totalExp = catBreakdown.reduce((s, e) => s + e.total, 0);
+
+    const pieSection = document.getElementById('cat-pie-section');
+    if (!pieSection) return;
+
+    pieSection.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">รายจ่ายตามหมวด</h2>
+          <div class="cat-month-nav">
+            <button class="icon-btn" id="cat-prev-month" title="เดือนก่อน">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="cat-month-label">${formatMonthShort(catMonth)}</span>
+            <button class="icon-btn" id="cat-next-month" title="เดือนถัดไป">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+        ${catBreakdown.length > 0 ? `
+          <div class="chart-wrap chart-wrap-donut">
+            <canvas id="pie-chart"></canvas>
+          </div>
+          <div class="cat-legend">
+            ${catBreakdown.slice(0, 6).map((e, i) => {
+              const pct = totalExp > 0 ? Math.round((e.total / totalExp) * 100) : 0;
+              return `
+                <div class="legend-item">
+                  <span class="legend-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
+                  <span class="legend-label">${e.cat.icon || ''} ${e.cat.name}</span>
+                  <span class="legend-pct">${pct}%</span>
+                  <span class="legend-value mono">${formatTHB(e.total)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : '<div class="empty-state-sm">ยังไม่มีรายจ่ายในเดือนนี้</div>'}
+      </div>
+    `;
+
+    requestAnimationFrame(() => {
+      if (catBreakdown.length > 0) drawPieChart(catBreakdown, totalExp);
+    });
+
+    document.getElementById('cat-prev-month')?.addEventListener('click', () => {
+      catMonth = offsetMonth(catMonth, -1);
+      renderPieSection();
+    });
+    document.getElementById('cat-next-month')?.addEventListener('click', () => {
+      catMonth = offsetMonth(catMonth, 1);
+      renderPieSection();
+    });
+  }
 
   async function render() {
     const [categories, allTxs] = await Promise.all([
@@ -22,22 +92,8 @@ export async function initAnalytics(container, store) {
     ]);
 
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
-
-    // Monthly totals for bar chart
     const monthData = await Promise.all(months.map(m => store.getMonthSummary(m)));
 
-    // Category spending for current month (last in months array)
-    const currentMonthTxs = allTxs.filter(t => t.date?.startsWith(endMonth) && t.type === 'expense');
-    const catTotals = {};
-    for (const tx of currentMonthTxs) {
-      const cat = catMap[tx.categoryId];
-      if (!cat) continue;
-      catTotals[tx.categoryId] = catTotals[tx.categoryId] || { cat, total: 0 };
-      catTotals[tx.categoryId].total += tx.amountMinor;
-    }
-    const catBreakdown = Object.values(catTotals).sort((a, b) => b.total - a.total);
-
-    // Saving rate trend
     const savingRates = monthData.map(d => d.income > 0 ? Math.round((d.net / d.income) * 100) : 0);
 
     container.innerHTML = `
@@ -58,27 +114,8 @@ export async function initAnalytics(container, store) {
         </div>
 
         <div class="dashboard-grid">
-          <!-- Category breakdown pie -->
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">รายจ่ายตามหมวด</h2>
-              <span class="card-subtitle">${formatMonthShort(endMonth)}</span>
-            </div>
-            ${catBreakdown.length > 0 ? `
-              <div class="chart-wrap chart-wrap-donut">
-                <canvas id="pie-chart"></canvas>
-              </div>
-              <div class="cat-legend">
-                ${catBreakdown.slice(0, 6).map((e, i) => `
-                  <div class="legend-item">
-                    <span class="legend-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
-                    <span class="legend-label">${e.cat.icon || ''} ${e.cat.name}</span>
-                    <span class="legend-value mono">${formatTHB(e.total)}</span>
-                  </div>
-                `).join('')}
-              </div>
-            ` : '<div class="empty-state-sm">ยังไม่มีรายจ่าย</div>'}
-          </div>
+          <!-- Category breakdown pie (with month selector) -->
+          <div id="cat-pie-section"></div>
 
           <!-- Saving rate trend -->
           <div class="card">
@@ -140,9 +177,10 @@ export async function initAnalytics(container, store) {
 
     requestAnimationFrame(() => {
       drawBarChart(months, monthData);
-      if (catBreakdown.length > 0) drawPieChart(catBreakdown);
       drawTrendChart(months, savingRates);
     });
+
+    await renderPieSection();
   }
 
   await render();
@@ -200,7 +238,7 @@ function drawBarChart(months, data) {
   });
 }
 
-function drawPieChart(catBreakdown) {
+function drawPieChart(catBreakdown, totalExp) {
   const canvas = document.getElementById('pie-chart');
   if (!canvas) return;
   if (pieChart) { pieChart.destroy(); pieChart = null; }
@@ -220,9 +258,17 @@ function drawPieChart(catBreakdown) {
     },
     options: {
       cutout:   '65%',
-      plugins:  { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => ` ฿${ctx.parsed.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` },
-      }},
+      plugins:  {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pct = totalExp > 0 ? Math.round((ctx.parsed / (totalExp / 100)) * 100) : 0;
+              return ` ฿${ctx.parsed.toLocaleString('th-TH', { minimumFractionDigits: 2 })}  (${pct}%)`;
+            },
+          },
+        },
+      },
       animation: { duration: 400 },
     },
   });
@@ -274,6 +320,12 @@ function last6Months(endMonth) {
     result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
   return result;
+}
+
+function offsetMonth(monthStr, delta) {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function avg(arr) {

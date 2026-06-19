@@ -10,13 +10,13 @@ export async function initBudget(container, store, { showToast }) {
   let month = currentMonth();
 
   async function render() {
-    const [budgets, txs, categories] = await Promise.all([
+    const [budgets, templates, txs, categories] = await Promise.all([
       store.getBudgets(month),
+      store.getBudgetTemplates(),
       store.getTransactions({ month, type: 'expense' }),
       store.getCategories('expense'),
     ]);
 
-    // Spending per category this month
     const spendMap = {};
     for (const tx of txs) {
       spendMap[tx.categoryId] = (spendMap[tx.categoryId] || 0) + tx.amountMinor;
@@ -24,26 +24,42 @@ export async function initBudget(container, store, { showToast }) {
 
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
 
-    // Budgeted categories
+    // Monthly budgets
     const budgetItems = budgets.map(b => {
-      const spent   = spendMap[b.categoryId] || 0;
-      const pct     = b.limitMinor > 0 ? Math.round((spent / b.limitMinor) * 100) : 0;
+      const spent     = spendMap[b.categoryId] || 0;
+      const pct       = b.limitMinor > 0 ? Math.round((spent / b.limitMinor) * 100) : 0;
       const remaining = b.limitMinor - spent;
-      const cat     = catMap[b.categoryId];
-      const over    = spent > b.limitMinor;
-      const near    = !over && pct >= 80;
-      return { b, cat, spent, pct, remaining, over, near };
+      const cat       = catMap[b.categoryId];
+      const over      = spent > b.limitMinor;
+      const near      = !over && pct >= 80;
+      return { b, cat, spent, pct, remaining, over, near, isTemplate: false };
     });
 
-    // Unbudgeted categories that have spending
+    // Template items that have no monthly override for this month
     const budgetedCatIds = new Set(budgets.map(b => b.categoryId));
+    const templateItems = templates
+      .filter(t => !budgetedCatIds.has(t.categoryId))
+      .map(t => {
+        const spent     = spendMap[t.categoryId] || 0;
+        const pct       = t.limitMinor > 0 ? Math.round((spent / t.limitMinor) * 100) : 0;
+        const remaining = t.limitMinor - spent;
+        const cat       = catMap[t.categoryId];
+        const over      = spent > t.limitMinor;
+        const near      = !over && pct >= 80;
+        return { b: t, cat, spent, pct, remaining, over, near, isTemplate: true };
+      });
+
+    const allItems = [...budgetItems, ...templateItems];
+
+    // Unbudgeted categories with spending (no monthly budget AND no template)
+    const allBudgetedCatIds = new Set(allItems.map(i => i.b.categoryId));
     const unbudgeted = Object.entries(spendMap)
-      .filter(([catId]) => !budgetedCatIds.has(catId))
+      .filter(([catId]) => !allBudgetedCatIds.has(catId))
       .map(([catId, spent]) => ({ cat: catMap[catId], spent }))
       .filter(e => e.cat);
 
-    const totalBudget = budgets.reduce((s, b) => s + b.limitMinor, 0);
-    const totalSpent  = budgets.reduce((s, b) => s + (spendMap[b.categoryId] || 0), 0);
+    const totalBudget = allItems.reduce((s, i) => s + i.b.limitMinor, 0);
+    const totalSpent  = allItems.reduce((s, i) => s + i.spent, 0);
     const totalPct    = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
     container.innerHTML = `
@@ -65,7 +81,6 @@ export async function initBudget(container, store, { showToast }) {
 
       <div class="page-body">
         ${totalBudget > 0 ? `
-          <!-- Overall progress -->
           <div class="card budget-overview">
             <div class="budget-overview-header">
               <div>
@@ -87,19 +102,20 @@ export async function initBudget(container, store, { showToast }) {
           </div>
         ` : ''}
 
-        <!-- Budgeted categories -->
-        ${budgetItems.length > 0 ? `
+        <!-- Budgeted categories (monthly + templates) -->
+        ${allItems.length > 0 ? `
           <div class="card">
             <div class="card-header">
               <h2 class="card-title">งบประมาณ</h2>
             </div>
             <div class="budget-list">
-              ${budgetItems.map(({ b, cat, spent, pct, remaining, over, near }) => `
-                <div class="budget-row" data-budget-id="${b.id}">
+              ${allItems.map(({ b, cat, spent, pct, remaining, over, near, isTemplate }) => `
+                <div class="budget-row ${isTemplate ? 'is-template' : ''}" data-budget-id="${b.id}" data-is-template="${isTemplate}">
                   <div class="budget-row-header">
                     <div class="budget-cat">
                       <span class="budget-icon">${cat?.icon || '📦'}</span>
                       <span class="budget-name">${cat?.name || 'ไม่ระบุ'}</span>
+                      ${isTemplate ? '<span class="template-badge">ทุกเดือน</span>' : ''}
                       ${over ? '<span class="badge badge-danger">เกินงบ</span>' : near ? '<span class="badge badge-warning">ใกล้เกิน</span>' : ''}
                     </div>
                     <div class="budget-amounts">
@@ -148,27 +164,66 @@ export async function initBudget(container, store, { showToast }) {
           </div>
         ` : ''}
 
-        <!-- Copy last month -->
+        <!-- Templates section -->
+        ${templates.length > 0 ? `
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">งบทุกเดือน</h2>
+              <span class="card-subtitle">ใช้ทุกเดือนเมื่อไม่มีงบเฉพาะ</span>
+            </div>
+            <div class="budget-list">
+              ${templates.map(t => {
+                const cat = catMap[t.categoryId];
+                return `
+                  <div class="budget-row" data-budget-id="${t.id}" data-is-template="true">
+                    <div class="budget-row-header">
+                      <div class="budget-cat">
+                        <span class="budget-icon">${cat?.icon || '📦'}</span>
+                        <span class="budget-name">${cat?.name || 'ไม่ระบุ'}</span>
+                        <span class="template-badge">ทุกเดือน</span>
+                      </div>
+                      <span class="mono">${formatTHB(t.limitMinor)}</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Tools -->
         <div class="card">
           <div class="card-header">
             <h2 class="card-title">เครื่องมือ</h2>
           </div>
-          <button class="btn-ghost" id="btn-copy-last-month">คัดลอกงบจากเดือนที่แล้ว</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-ghost" id="btn-copy-last-month">คัดลอกงบจากเดือนที่แล้ว</button>
+            ${templates.length > 0 ? `<button class="btn-ghost" id="btn-apply-templates">ใช้ Template เดือนนี้</button>` : ''}
+          </div>
         </div>
       </div>
     `;
 
-    // Bind events
+    // Events
     document.getElementById('prev-month')?.addEventListener('click', () => { month = offsetMonth(month, -1); render(); });
     document.getElementById('next-month')?.addEventListener('click', () => { month = offsetMonth(month, 1); render(); });
 
     document.getElementById('btn-add-budget')?.addEventListener('click', () => openBudgetModal(null, month));
     document.getElementById('btn-add-budget-empty')?.addEventListener('click', () => openBudgetModal(null, month));
 
+    // Click budget row — template rows edit template, monthly rows edit monthly
     container.querySelectorAll('.budget-row[data-budget-id]').forEach(row => {
-      row.addEventListener('click', () => openBudgetModal(row.dataset.budgetId));
+      row.addEventListener('click', () => {
+        const isTemplate = row.dataset.isTemplate === 'true';
+        if (isTemplate) {
+          openBudgetModal(row.dataset.budgetId);
+        } else {
+          openBudgetModal(row.dataset.budgetId);
+        }
+      });
     });
 
+    // Copy from last month
     document.getElementById('btn-copy-last-month')?.addEventListener('click', async () => {
       const lastMonth = offsetMonth(month, -1);
       const lastBudgets = await store.getBudgets(lastMonth);
@@ -182,6 +237,20 @@ export async function initBudget(container, store, { showToast }) {
         count++;
       }
       if (count > 0) { showToast(`คัดลอก ${count} หมวดสำเร็จ`); render(); }
+      else showToast('มีงบครบทุกหมวดแล้ว');
+    });
+
+    // Apply templates to this month
+    document.getElementById('btn-apply-templates')?.addEventListener('click', async () => {
+      const existingCatIds = new Set(budgets.map(b => b.categoryId));
+      let count = 0;
+      for (const t of templates) {
+        if (existingCatIds.has(t.categoryId)) continue;
+        const { makeBudget } = await import('../schema.js');
+        await store.put('budgets', makeBudget({ month, categoryId: t.categoryId, limitMinor: t.limitMinor }));
+        count++;
+      }
+      if (count > 0) { showToast(`ใช้ Template ${count} หมวดสำเร็จ`); render(); }
       else showToast('มีงบครบทุกหมวดแล้ว');
     });
   }

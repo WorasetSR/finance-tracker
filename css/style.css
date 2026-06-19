@@ -2083,3 +2083,135 @@ img  { display: block; max-width: 100%; }
   font-weight: 700;
 }
 .calc-btn.calc-ok:active { background: var(--primary-600); transform: scale(.93); }
+
+/* ── DRAG & REORDER ──────────────────────────────────────── */
+.drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  padding: 4px 2px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0.4;
+  transition: opacity var(--transition);
+}
+.drag-handle:active { cursor: grabbing; }
+.account-manage-row:hover .drag-handle,
+.account-row:hover .drag-handle { opacity: 1; }
+
+.dragging { opacity: 0.35 !important; }
+.drag-over {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+/* ── DASHBOARD ACCOUNT SUM ───────────────────────────────── */
+.account-check {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+
+.account-sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 4px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  font-size: 13px;
+}
+.account-sum-label { color: var(--text-secondary); font-weight: 500; }
+.account-sum-value { font-family: var(--font-mono); font-weight: 600; color: var(--primary); }
+
+/* ── ACCOUNTS PAGE TOTAL ─────────────────────────────────── */
+.accounts-total-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.accounts-total-label {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.accounts-total-value {
+  font-family: var(--font-mono); font-size: 20px; font-weight: 600;
+  color: var(--text); letter-spacing: -0.02em;
+}
+
+/* ── ARCHIVE SECTION ─────────────────────────────────────── */
+.archive-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  cursor: pointer; padding: 10px 4px 6px;
+  border: none; background: none; width: 100%; text-align: left;
+  transition: color var(--transition);
+}
+.archive-toggle:hover { color: var(--text-secondary); }
+.archive-toggle-arrow { transition: transform 0.2s; display: inline-block; }
+.archive-toggle.open .archive-toggle-arrow { transform: rotate(90deg); }
+
+.archived-list { display: none; }
+.archived-list.visible { display: flex; flex-direction: column; gap: 2px; }
+
+.account-manage-row.archived-row { opacity: 0.55; }
+
+.restore-btn {
+  font-size: 11px; font-weight: 500;
+  color: var(--primary); border: 1px solid var(--primary-100);
+  background: var(--primary-50); border-radius: 4px;
+  padding: 3px 9px; flex-shrink: 0;
+  transition: background var(--transition);
+}
+.restore-btn:hover { background: var(--primary-100); }
+
+/* ── ANALYTICS LEGEND % ──────────────────────────────────── */
+.legend-pct {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-muted); flex-shrink: 0;
+  min-width: 36px; text-align: right;
+}
+
+/* ── ANALYTICS MONTH NAV ─────────────────────────────────── */
+.cat-month-nav {
+  display: flex; align-items: center; gap: 6px;
+}
+.cat-month-label {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  min-width: 80px; text-align: center;
+}
+
+/* ── BUDGET TEMPLATE ─────────────────────────────────────── */
+.template-badge {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 600;
+  color: var(--primary); background: var(--primary-50);
+  border: 1px solid var(--primary-100);
+  border-radius: 10px; padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+.budget-row.is-template {
+  background: var(--primary-50);
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+}
+[data-theme="dark"] .budget-row.is-template { background: color-mix(in srgb, var(--primary) 8%, var(--bg-card)); }
+
+/* ── ARCHIVE BUTTON ──────────────────────────────────────── */
+.btn-archive {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 16px; font-size: 14px; font-weight: 500;
+  font-family: var(--font); cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.btn-archive:hover { background: var(--border-light); color: var(--text); border-color: var(--text-muted); }

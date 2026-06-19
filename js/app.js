@@ -458,15 +458,18 @@ document.getElementById('btn-delete-tx')?.addEventListener('click', async () => 
 // ── Account modal ─────────────────────────────────────────────
 
 window.openAccountModal = async function(accountId = null) {
-  const titleEl   = document.getElementById('account-modal-title');
-  const deleteBtn = document.getElementById('btn-delete-account');
-  const idInput   = document.getElementById('account-id');
+  const titleEl      = document.getElementById('account-modal-title');
+  const deleteBtn    = document.getElementById('btn-delete-account');
+  const archiveBtn   = document.getElementById('btn-archive-account');
+  const idInput      = document.getElementById('account-id');
 
   if (accountId) {
     const acc = await store.get('accounts', accountId);
     if (!acc) return;
     titleEl.textContent = 'แก้ไขบัญชี';
     deleteBtn.classList.remove('hidden');
+    archiveBtn.classList.remove('hidden');
+    archiveBtn.textContent = acc.archived ? 'กู้คืนบัญชี' : 'จัดเก็บ';
     idInput.value = acc.id;
     document.getElementById('account-name').value    = acc.name;
     document.getElementById('account-balance').value = (acc.initialBalanceMinor / 100).toFixed(2);
@@ -475,6 +478,7 @@ window.openAccountModal = async function(accountId = null) {
   } else {
     titleEl.textContent = 'เพิ่มบัญชี';
     deleteBtn.classList.add('hidden');
+    archiveBtn.classList.add('hidden');
     idInput.value = '';
     document.getElementById('account-name').value    = '';
     document.getElementById('account-balance').value = '0';
@@ -514,6 +518,27 @@ document.getElementById('btn-delete-account')?.addEventListener('click', async (
   await store.softDelete('accounts', editId);
   closeModal('account-modal');
   showToast('ลบบัญชีแล้ว');
+  refreshPage();
+});
+
+document.getElementById('btn-archive-account')?.addEventListener('click', async () => {
+  const editId = document.getElementById('account-id').value;
+  if (!editId) return;
+  const existing = await store.get('accounts', editId);
+  if (!existing) return;
+  const isArchived = !!existing.archived;
+  const action = isArchived ? 'กู้คืน' : 'จัดเก็บ';
+  const ok = await showConfirm(
+    action + 'บัญชี',
+    isArchived
+      ? 'ต้องการกู้คืนบัญชีนี้กลับมาใช้งานหรือไม่?'
+      : 'ต้องการจัดเก็บบัญชีนี้? จะถูกซ่อนจากทุกที่ รายการเดิมยังคงอยู่'
+  );
+  if (!ok) return;
+  Object.assign(existing, { archived: !isArchived, updatedAt: new Date().toISOString(), synced: false });
+  await store.put('accounts', existing);
+  closeModal('account-modal');
+  showToast(isArchived ? 'กู้คืนบัญชีแล้ว' : 'จัดเก็บบัญชีแล้ว');
   refreshPage();
 });
 
@@ -580,13 +605,24 @@ document.getElementById('btn-delete-category')?.addEventListener('click', async 
 // ── Budget modal ──────────────────────────────────────────────
 
 window.openBudgetModal = async function(budgetId = null, defaultMonth = null) {
-  const titleEl   = document.getElementById('budget-modal-title');
-  const idInput   = document.getElementById('budget-id');
-  const deleteBtn = document.getElementById('btn-delete-budget');
-  const cats      = await store.getCategories('expense');
+  const titleEl    = document.getElementById('budget-modal-title');
+  const idInput    = document.getElementById('budget-id');
+  const deleteBtn  = document.getElementById('btn-delete-budget');
+  const noMonthCb  = document.getElementById('budget-no-month');
+  const monthGrp   = document.getElementById('grp-budget-month');
+  const cats       = await store.getCategories('expense');
 
   document.getElementById('budget-category').innerHTML =
     cats.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
+
+  const toggleMonthField = () => {
+    const noMonth = noMonthCb.checked;
+    monthGrp.classList.toggle('hidden', noMonth);
+    document.getElementById('budget-month').required = !noMonth;
+  };
+
+  noMonthCb.removeEventListener('change', toggleMonthField);
+  noMonthCb.addEventListener('change', toggleMonthField);
 
   if (budgetId) {
     const b = await store.get('budgets', budgetId);
@@ -594,16 +630,20 @@ window.openBudgetModal = async function(budgetId = null, defaultMonth = null) {
     titleEl.textContent = 'แก้ไขงบประมาณ';
     idInput.value = b.id;
     document.getElementById('budget-category').value = b.categoryId;
-    document.getElementById('budget-month').value    = b.month;
-    document.getElementById('budget-limit').value    = (b.limitMinor / 100).toFixed(2);
+    const isTemplate = b.month == null;
+    noMonthCb.checked = isTemplate;
+    if (!isTemplate) document.getElementById('budget-month').value = b.month;
+    document.getElementById('budget-limit').value = (b.limitMinor / 100).toFixed(2);
     deleteBtn.classList.remove('hidden');
   } else {
     titleEl.textContent = 'ตั้งงบประมาณ';
     idInput.value = '';
+    noMonthCb.checked = false;
     document.getElementById('budget-month').value = defaultMonth || currentMonth();
     document.getElementById('budget-limit').value = '';
     deleteBtn.classList.add('hidden');
   }
+  toggleMonthField();
   openModal('budget-modal');
 };
 
@@ -620,10 +660,18 @@ document.getElementById('btn-delete-budget')?.addEventListener('click', async ()
 
 document.getElementById('budget-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const editId = document.getElementById('budget-id').value;
+  const editId    = document.getElementById('budget-id').value;
+  const noMonth   = document.getElementById('budget-no-month').checked;
+  const monthVal  = noMonth ? null : document.getElementById('budget-month').value;
+
+  if (!noMonth && !monthVal) {
+    showToast('กรุณาระบุเดือน หรือเลือก "ใช้ทุกเดือน"', 'error');
+    return;
+  }
+
   const data = {
     categoryId: document.getElementById('budget-category').value,
-    month:      document.getElementById('budget-month').value,
+    month:      monthVal,
     limitMinor: parseAmount(document.getElementById('budget-limit').value),
   };
 

@@ -8,6 +8,35 @@ import { currentMonth } from '../schema.js';
 
 let chartInstance = null;
 
+const ORDER_KEY     = 'ft_account_order';
+const SUM_SEL_KEY   = 'ft_sum_selection';
+
+function getAccountOrder() {
+  try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]'); } catch { return []; }
+}
+function saveAccountOrder(ids) {
+  localStorage.setItem(ORDER_KEY, JSON.stringify(ids));
+}
+function getSumSelection() {
+  try { return JSON.parse(localStorage.getItem(SUM_SEL_KEY) || '{}'); } catch { return {}; }
+}
+function saveSumSelection(sel) {
+  localStorage.setItem(SUM_SEL_KEY, JSON.stringify(sel));
+}
+
+function sortByOrder(accounts) {
+  const order = getAccountOrder();
+  if (!order.length) return accounts;
+  return [...accounts].sort((a, b) => {
+    const ia = order.indexOf(a.id);
+    const ib = order.indexOf(b.id);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
+
 export async function initDashboard(container, store, { openTxModal, showToast }) {
   let month = currentMonth();
 
@@ -21,6 +50,22 @@ export async function initDashboard(container, store, { openTxModal, showToast }
 
     const balancePromises = accounts.map(a => store.computeBalance(a.id).then(b => ({ ...a, balance: b })));
     const accountsWithBalance = await Promise.all(balancePromises);
+    const visibleAccounts = sortByOrder(accountsWithBalance.filter(a => !a.hidden));
+
+    // Ensure order is initialised for any new accounts
+    const storedOrder = getAccountOrder();
+    const allIds = accountsWithBalance.map(a => a.id);
+    const newIds = allIds.filter(id => !storedOrder.includes(id));
+    if (newIds.length) saveAccountOrder([...storedOrder, ...newIds]);
+
+    // Sum selection state (default: all selected)
+    const sel = getSumSelection();
+    visibleAccounts.forEach(a => { if (!(a.id in sel)) sel[a.id] = true; });
+
+    const selectedSum = visibleAccounts
+      .filter(a => sel[a.id] !== false)
+      .reduce((s, a) => s + a.balance, 0);
+    const allSelected = visibleAccounts.every(a => sel[a.id] !== false);
 
     // Category spending breakdown
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
@@ -34,7 +79,6 @@ export async function initDashboard(container, store, { openTxModal, showToast }
     }
     const topCats = Object.values(catTotals).sort((a, b) => b.total - a.total).slice(0, 5);
 
-    // Recent transactions
     const recent = txs.slice(0, 8);
 
     const savingRate = summary.income > 0
@@ -55,7 +99,6 @@ export async function initDashboard(container, store, { openTxModal, showToast }
       </div>
 
       <div class="page-body">
-        <!-- Summary stats -->
         <div class="stats-grid">
           <div class="stat-card">
             <span class="stat-label">รายรับ</span>
@@ -78,20 +121,30 @@ export async function initDashboard(container, store, { openTxModal, showToast }
         </div>
 
         <div class="dashboard-grid">
-          <!-- Account balances -->
+          <!-- Account balances with checkboxes and reorder -->
           <div class="card">
             <div class="card-header">
               <h2 class="card-title">บัญชี</h2>
             </div>
-            <div class="account-list">
-              ${accountsWithBalance.filter(a => !a.hidden).map(a => `
-                <div class="account-row">
+            <div class="account-list" id="dash-account-list">
+              ${visibleAccounts.length > 0 ? visibleAccounts.map(a => `
+                <div class="account-row" draggable="true" data-account-id="${a.id}">
+                  <span class="drag-handle" title="ลาก เพื่อจัดเรียง">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="4.5" cy="2.5" r="1"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="9.5" r="1"/><circle cx="7.5" cy="2.5" r="1"/><circle cx="7.5" cy="6" r="1"/><circle cx="7.5" cy="9.5" r="1"/></svg>
+                  </span>
+                  <input type="checkbox" class="account-check" data-acc-id="${a.id}" ${sel[a.id] !== false ? 'checked' : ''} title="รวมใน sum">
                   <span class="account-icon">${a.icon || '💳'}</span>
                   <span class="account-name">${a.name}</span>
                   <span class="account-balance mono ${a.balance < 0 ? 'expense' : ''}">${formatTHB(a.balance)}</span>
                 </div>
-              `).join('') || '<div class="empty-state-sm">ยังไม่มีบัญชี</div>'}
+              `).join('') : '<div class="empty-state-sm">ยังไม่มีบัญชี</div>'}
             </div>
+            ${visibleAccounts.length > 0 ? `
+              <div class="account-sum-row">
+                <span class="account-sum-label">รวมที่เลือก</span>
+                <span class="account-sum-value" id="dash-sum-value">${formatTHB(selectedSum)}</span>
+              </div>
+            ` : ''}
           </div>
 
           <!-- Spending by category chart -->
@@ -151,22 +204,41 @@ export async function initDashboard(container, store, { openTxModal, showToast }
       requestAnimationFrame(() => drawDonut(topCats));
     }
 
-    // Bind month nav
+    // Month nav
     document.getElementById('prev-month')?.addEventListener('click', () => {
-      month = offsetMonth(month, -1);
-      render();
+      month = offsetMonth(month, -1); render();
     });
     document.getElementById('next-month')?.addEventListener('click', () => {
-      month = offsetMonth(month, 1);
-      render();
+      month = offsetMonth(month, 1); render();
     });
 
-    // Bind tx row clicks
+    // Tx row clicks
     container.querySelectorAll('.tx-row[data-tx-id]').forEach(row => {
       row.addEventListener('click', () => openTxModal(row.dataset.txId));
     });
 
-    // "ดูทั้งหมด" uses data-page delegation in #main-app — no extra listener needed
+    // Checkbox sum
+    container.querySelectorAll('.account-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const s = getSumSelection();
+        s[cb.dataset.accId] = cb.checked;
+        saveSumSelection(s);
+        const visIds = visibleAccounts.map(a => a.id);
+        const total = visibleAccounts
+          .filter(a => s[a.id] !== false)
+          .reduce((sum, a) => sum + a.balance, 0);
+        const el = document.getElementById('dash-sum-value');
+        if (el) el.textContent = formatTHB(total);
+      });
+    });
+
+    // Drag-to-reorder
+    bindDragReorder(
+      document.getElementById('dash-account-list'),
+      '.account-row[data-account-id]',
+      'account-id',
+      visibleAccounts.map(a => a.id)
+    );
   }
 
   await render();
@@ -175,6 +247,51 @@ export async function initDashboard(container, store, { openTxModal, showToast }
     if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
   };
 }
+
+// ── Drag-to-reorder helper ────────────────────────────────────
+
+function bindDragReorder(list, rowSelector, idAttr, initialOrder) {
+  if (!list) return;
+  let dragSrcId = null;
+  let currentOrder = [...initialOrder];
+
+  list.querySelectorAll(rowSelector).forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragSrcId = row.dataset[idAttr];
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => row.classList.add('dragging'), 0);
+    });
+    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      const dstId = row.dataset[idAttr];
+      if (!dragSrcId || dragSrcId === dstId) return;
+      const srcIdx = currentOrder.indexOf(dragSrcId);
+      const dstIdx = currentOrder.indexOf(dstId);
+      if (srcIdx === -1 || dstIdx === -1) return;
+      currentOrder.splice(srcIdx, 1);
+      currentOrder.splice(dstIdx, 0, dragSrcId);
+      saveAccountOrder(currentOrder);
+      // Visually reorder DOM
+      const srcEl = list.querySelector(`[data-${idAttr}="${dragSrcId}"]`);
+      const dstEl = list.querySelector(`[data-${idAttr}="${dstId}"]`);
+      if (srcEl && dstEl) {
+        if (srcIdx < dstIdx) dstEl.after(srcEl);
+        else dstEl.before(srcEl);
+      }
+    });
+  });
+}
+
+// Export for accounts.js to reuse
+export { bindDragReorder };
 
 // ── Chart ─────────────────────────────────────────────────────
 
