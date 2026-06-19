@@ -201,7 +201,7 @@ export async function initAccounts(container, store, { showToast }) {
     bindDragReorder(
       document.getElementById('accounts-list'),
       '.account-manage-row[data-account-id]',
-      'account-id',
+      'data-account-id',
       sortedAccounts.map(a => a.id)
     );
   }
@@ -213,14 +213,14 @@ export async function initAccounts(container, store, { showToast }) {
 
 // ── Drag-to-reorder ───────────────────────────────────────────
 
-function bindDragReorder(list, rowSelector, idAttr, initialOrder) {
+function bindDragReorder(list, rowSelector, dataAttr, initialOrder) {
   if (!list) return;
   let dragSrcId = null;
   let currentOrder = [...initialOrder];
 
   list.querySelectorAll(rowSelector).forEach(row => {
     row.addEventListener('dragstart', e => {
-      dragSrcId = row.dataset[idAttr];
+      dragSrcId = row.getAttribute(dataAttr);
       e.dataTransfer.effectAllowed = 'move';
       setTimeout(() => row.classList.add('dragging'), 0);
     });
@@ -230,11 +230,13 @@ function bindDragReorder(list, rowSelector, idAttr, initialOrder) {
       e.dataTransfer.dropEffect = 'move';
       row.classList.add('drag-over');
     });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('dragleave', e => {
+      if (!row.contains(e.relatedTarget)) row.classList.remove('drag-over');
+    });
     row.addEventListener('drop', e => {
       e.preventDefault();
       row.classList.remove('drag-over');
-      const dstId = row.dataset[idAttr];
+      const dstId = row.getAttribute(dataAttr);
       if (!dragSrcId || dragSrcId === dstId) return;
       const srcIdx = currentOrder.indexOf(dragSrcId);
       const dstIdx = currentOrder.indexOf(dstId);
@@ -242,8 +244,8 @@ function bindDragReorder(list, rowSelector, idAttr, initialOrder) {
       currentOrder.splice(srcIdx, 1);
       currentOrder.splice(dstIdx, 0, dragSrcId);
       saveAccountOrder(currentOrder);
-      const srcEl = list.querySelector(`[data-${idAttr}="${dragSrcId}"]`);
-      const dstEl = list.querySelector(`[data-${idAttr}="${dstId}"]`);
+      const srcEl = list.querySelector(`[${dataAttr}="${dragSrcId}"]`);
+      const dstEl = list.querySelector(`[${dataAttr}="${dstId}"]`);
       if (srcEl && dstEl) {
         if (srcIdx < dstIdx) dstEl.after(srcEl);
         else dstEl.before(srcEl);
