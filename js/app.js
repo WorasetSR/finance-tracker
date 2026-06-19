@@ -835,12 +835,14 @@ async function initSettings(container) {
   });
 
   document.getElementById('s-export-all').addEventListener('click', async () => {
-    const [txs, accs, cats] = await Promise.all([
+    const [txs, activeAccs, archivedAccs, cats, budgets] = await Promise.all([
       store.getTransactions({}),
       store.getAccounts(),
+      store.getArchivedAccounts(),
       store.getCategories(),
+      store.getAll('budgets'),
     ]);
-    exportTransactions(txs, accs, cats, 'finance-tracker-export');
+    exportTransactions(txs, [...activeAccs, ...archivedAccs], cats, budgets, 'finance-tracker-export');
   });
 
   document.getElementById('s-clear-cache').addEventListener('click', async () => {
