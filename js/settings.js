@@ -5,14 +5,17 @@
 
 /** @readonly */
 const KEYS = Object.freeze({
-  owner:     'ft_gh_owner',
-  repo:      'ft_gh_repo',
-  branch:    'ft_gh_branch',
-  token:     'ft_gh_token',
-  lastSync:  'ft_last_sync',
-  syncState: 'ft_sync_state',
-  geminiKey: 'ft_gemini_key',
+  owner:       'ft_gh_owner',
+  repo:        'ft_gh_repo',
+  branch:      'ft_gh_branch',
+  token:       'ft_gh_token',
+  lastSync:    'ft_last_sync',
+  syncState:   'ft_sync_state',
+  geminiKey:   'ft_gemini_key',
+  supabaseUrl: 'ft_supabase_url',
+  supabaseKey: 'ft_supabase_key',
 });
+
 
 // ── Gemini AI config ─────────────────────────────────────────
 
@@ -62,11 +65,31 @@ export function clearConfig() {
   Object.values(KEYS).forEach(k => localStorage.removeItem(k));
 }
 
+// ── Supabase config ──────────────────────────────────────────
+
+export function getSupabaseSettings() {
+  return {
+    url: localStorage.getItem(KEYS.supabaseUrl) || 'https://jywdntrfthhzivrgfawo.supabase.co',
+    key: localStorage.getItem(KEYS.supabaseKey) || 'sb_publishable_bknfSJR5POxeJTYy-0LK4A_PUw_ukbU',
+  };
+}
+
+export function saveSupabaseSettings({ url, key }) {
+  if (url) localStorage.setItem(KEYS.supabaseUrl, url.trim());
+  else localStorage.removeItem(KEYS.supabaseUrl);
+
+  if (key) localStorage.setItem(KEYS.supabaseKey, key.trim());
+  else localStorage.removeItem(KEYS.supabaseKey);
+}
+
 /**
- * True if all four required GitHub config keys are present and non-empty.
+ * True if Supabase or GitHub sync is configured.
  * @returns {boolean}
  */
 export function isConfigured() {
+  const supa = getSupabaseSettings();
+  if (supa.url && supa.key) return true;
+
   return !!(
     localStorage.getItem(KEYS.owner)  &&
     localStorage.getItem(KEYS.repo)   &&
@@ -74,6 +97,7 @@ export function isConfigured() {
     localStorage.getItem(KEYS.token)
   );
 }
+
 
 // ── Sync state ────────────────────────────────────────────────
 

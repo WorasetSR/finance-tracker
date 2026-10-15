@@ -6,6 +6,22 @@
 import { LocalStore }                    from './local-store.js';
 import { getConfig, saveConfig, isConfigured, getSyncState, getLastSync, getGeminiKey, saveGeminiKey } from './settings.js';
 import { GitHubSync }                    from './sync.js';
+import {
+  pullAllFromSupabase,
+  migrateAllToSupabase,
+  syncAccount,
+  deleteAccount as deleteSupabaseAccount,
+  syncCategory,
+  deleteCategory as deleteSupabaseCategory,
+  syncBudget,
+  deleteBudget as deleteSupabaseBudget,
+  syncTransaction,
+  deleteTransaction as deleteSupabaseTransaction,
+  isSupabaseConfigured,
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  testSupabaseConnection,
+} from './supabase-client.js';
 import { makeTransaction, makeAccount, makeCategory, makeBudget, todayStr, currentMonth } from './schema.js';
 import { parseAmount, formatTHB, formatMonth } from './format.js';
 import { parseSlipImage, matchBankToAccount } from './slip-parser.js';
@@ -16,6 +32,7 @@ import { initTransactions }              from './pages/transactions.js';
 import { initBudget }                    from './pages/budget.js';
 import { initAnalytics }                 from './pages/analytics.js';
 import { initAccounts }                  from './pages/accounts.js';
+
 
 // ── Globals ───────────────────────────────────────────────────
 
@@ -123,8 +140,16 @@ async function showApp() {
   navigate('dashboard');
   updateSyncWidget();
 
-  // Safe sync on boot: Only pull from GitHub if there are NO unsynced local changes
-  if (isConfigured()) {
+  if (isSupabaseConfigured()) {
+    updateSyncWidget('syncing');
+    const result = await pullAllFromSupabase(store);
+    if (result.ok) {
+      updateSyncWidget('synced');
+      refreshPage();
+    } else {
+      updateSyncWidget('error');
+    }
+  } else if (isConfigured()) {
     const queue = await store.getPendingQueue();
     if (queue && queue.length > 0) {
       updateSyncWidget('pending');
@@ -136,11 +161,11 @@ async function showApp() {
         navigate('dashboard');
       } else {
         updateSyncWidget('error');
-        // Silent fail on boot — user can retry via Settings
       }
     }
   }
 }
+
 
 // ── Setup form ────────────────────────────────────────────────
 
@@ -265,8 +290,22 @@ document.getElementById('topbar-btn-sync')?.addEventListener('click', doSync);
 document.getElementById('topbar-btn-settings')?.addEventListener('click', () => navigate('settings'));
 
 async function doSync() {
+  if (isSupabaseConfigured()) {
+    updateSyncWidget('syncing');
+    const result = await pullAllFromSupabase(store);
+    if (result.ok) {
+      updateSyncWidget('synced');
+      showToast(`ซิงค์ข้อมูลกับ Supabase สำเร็จ (${result.count} รายการ) ⚡`);
+      refreshPage();
+    } else {
+      updateSyncWidget('error');
+      showToast('ซิงค์ล้มเหลว: ' + result.error, 'error');
+    }
+    return;
+  }
+
   if (!isConfigured()) {
-    showToast('ยังไม่ได้ตั้งค่า GitHub', 'error');
+    showToast('ยังไม่ได้ตั้งค่า Cloud หรือ GitHub', 'error');
     return;
   }
   updateSyncWidget('syncing');
@@ -280,6 +319,7 @@ async function doSync() {
     showToast('Sync ล้มเหลว: ' + result.error, 'error');
   }
 }
+
 
 function updateSyncWidget(stateOverride) {
   const state = stateOverride || getSyncState();
@@ -448,14 +488,17 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
   if (editId) {
     const existing = await store.get('transactions', editId);
     if (existing) {
-      Object.assign(existing, txData, { updatedAt: new Date().toISOString(), synced: false, pendingOp: 'update' });
+      Object.assign(existing, txData, { updatedAt: new Date().toISOString(), synced: true, pendingOp: 'update' });
       await store.put('transactions', existing);
       await store.addToPendingQueue({ id: editId, store: 'transactions', op: 'update' });
+      syncTransaction(existing).catch(console.error);
     }
   } else {
     const tx = makeTransaction(txData);
+    tx.synced = true;
     await store.put('transactions', tx);
     await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+    syncTransaction(tx).catch(console.error);
   }
 
   if (type === 'expense' && txData.categoryId && note) {
@@ -464,7 +507,7 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
 
   closeModal('tx-modal');
   showToast(editId ? 'แก้ไขรายการแล้ว' : 'เพิ่มรายการแล้ว');
-  updateSyncWidget('pending');
+  updateSyncWidget('synced');
   refreshPage();
 });
 
@@ -478,11 +521,13 @@ document.getElementById('btn-delete-tx')?.addEventListener('click', async () => 
 
   await store.softDelete('transactions', editId);
   await store.addToPendingQueue({ id: editId, store: 'transactions', op: 'delete' });
+  deleteSupabaseTransaction(editId).catch(console.error);
   closeModal('tx-modal');
   showToast('ลบรายการแล้ว');
-  updateSyncWidget('pending');
+  updateSyncWidget('synced');
   refreshPage();
 });
+
 
 // ── Slip modal (Batch Scan & Habit Matching) ──────────────────
 
@@ -645,6 +690,7 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
 
   await store.put('transactions', tx);
   await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+  syncTransaction(tx).catch(console.error);
 
   // Train habit engine on confirmed categorization and dynamic bank-to-account mapping
   learnHabit({
@@ -655,8 +701,9 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
     accountId,
   });
 
-  updateSyncWidget('pending');
+  updateSyncWidget('synced');
   showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว ✓`);
+
 
   currentSlipIndex++;
   await processCurrentSlip();
@@ -757,15 +804,18 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
 
   if (editId) {
     const existing = await store.get('accounts', editId);
-    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: false });
+    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: true });
     await store.put('accounts', existing);
     await store.addToPendingQueue({ id: editId, store: 'accounts', op: 'update' });
+    syncAccount(existing).catch(console.error);
   } else {
     const acc = makeAccount(data);
+    acc.synced = true;
     await store.put('accounts', acc);
     await store.addToPendingQueue({ id: acc.id, store: 'accounts', op: 'create' });
+    syncAccount(acc).catch(console.error);
   }
-  updateSyncWidget('pending');
+  updateSyncWidget('synced');
 
   closeModal('account-modal');
   showToast(editId ? 'แก้ไขบัญชีแล้ว' : 'เพิ่มบัญชีแล้ว');
@@ -778,11 +828,13 @@ document.getElementById('btn-delete-account')?.addEventListener('click', async (
   if (!ok) return;
   await store.softDelete('accounts', editId);
   await store.addToPendingQueue({ id: editId, store: 'accounts', op: 'delete' });
-  updateSyncWidget('pending');
+  deleteSupabaseAccount(editId).catch(console.error);
+  updateSyncWidget('synced');
   closeModal('account-modal');
   showToast('ลบบัญชีแล้ว');
   refreshPage();
 });
+
 
 document.getElementById('btn-archive-account')?.addEventListener('click', async () => {
   const editId = document.getElementById('account-id').value;
@@ -846,15 +898,18 @@ document.getElementById('category-form')?.addEventListener('submit', async (e) =
 
   if (editId) {
     const existing = await store.get('categories', editId);
-    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: false });
+    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: true });
     await store.put('categories', existing);
     await store.addToPendingQueue({ id: editId, store: 'categories', op: 'update' });
+    syncCategory(existing).catch(console.error);
   } else {
     const cat = makeCategory(data);
+    cat.synced = true;
     await store.put('categories', cat);
     await store.addToPendingQueue({ id: cat.id, store: 'categories', op: 'create' });
+    syncCategory(cat).catch(console.error);
   }
-  updateSyncWidget('pending');
+  updateSyncWidget('synced');
 
   closeModal('category-modal');
   showToast(editId ? 'แก้ไขหมวดหมู่แล้ว' : 'เพิ่มหมวดหมู่แล้ว');
@@ -867,11 +922,13 @@ document.getElementById('btn-delete-category')?.addEventListener('click', async 
   if (!ok) return;
   await store.softDelete('categories', editId);
   await store.addToPendingQueue({ id: editId, store: 'categories', op: 'delete' });
-  updateSyncWidget('pending');
+  deleteSupabaseCategory(editId).catch(console.error);
+  updateSyncWidget('synced');
   closeModal('category-modal');
   showToast('ลบหมวดหมู่แล้ว');
   refreshPage();
 });
+
 
 // ── Budget modal ──────────────────────────────────────────────
 
@@ -925,7 +982,8 @@ document.getElementById('btn-delete-budget')?.addEventListener('click', async ()
   if (!ok) return;
   await store.softDelete('budgets', editId);
   await store.addToPendingQueue({ id: editId, store: 'budgets', op: 'delete' });
-  updateSyncWidget('pending');
+  deleteSupabaseBudget(editId).catch(console.error);
+  updateSyncWidget('synced');
   closeModal('budget-modal');
   showToast('ลบงบประมาณแล้ว');
   refreshPage();
@@ -950,66 +1008,89 @@ document.getElementById('budget-form')?.addEventListener('submit', async (e) => 
 
   if (editId) {
     const existing = await store.get('budgets', editId);
-    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: false });
+    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: true });
     await store.put('budgets', existing);
     await store.addToPendingQueue({ id: editId, store: 'budgets', op: 'update' });
+    syncBudget(existing).catch(console.error);
   } else {
     // Check if budget for same category and month already exists
     const allBudgets = await store.getAll('budgets');
     const duplicate = allBudgets.find(b => !b.deletedAt && b.categoryId === data.categoryId && b.month === data.month);
     if (duplicate) {
-      Object.assign(duplicate, data, { updatedAt: new Date().toISOString(), synced: false });
+      Object.assign(duplicate, data, { updatedAt: new Date().toISOString(), synced: true });
       await store.put('budgets', duplicate);
       await store.addToPendingQueue({ id: duplicate.id, store: 'budgets', op: 'update' });
+      syncBudget(duplicate).catch(console.error);
     } else {
       const bgt = makeBudget(data);
+      bgt.synced = true;
       await store.put('budgets', bgt);
       await store.addToPendingQueue({ id: bgt.id, store: 'budgets', op: 'create' });
+      syncBudget(bgt).catch(console.error);
     }
   }
-  updateSyncWidget('pending');
+  updateSyncWidget('synced');
 
   closeModal('budget-modal');
   showToast(editId ? 'แก้ไขงบประมาณแล้ว' : 'ตั้งงบประมาณแล้ว');
   refreshPage();
 });
 
+
 // ── Settings page ─────────────────────────────────────────────
 
 async function initSettings(container) {
   const cfg = getConfig() || {};
+  const supaCfg = getSupabaseConfig();
+
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">ตั้งค่า</h1>
     </div>
     <div class="page-body">
+      <!-- Supabase Cloud Sync Card -->
       <div class="card" style="max-width:480px">
-        <h3 class="card-title">GitHub Sync</h3>
-        <form id="settings-form" autocomplete="off">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h3 class="card-title" style="margin:0">Supabase Cloud Sync (PostgreSQL)</h3>
+          <span class="badge badge-income">Auto-Sync ⚡</span>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
+          บันทึกและซิงค์ข้อมูลบนคลาวด์อัตโนมัติ รวดเร็วระดับมิลลิวินาที ปลอดภัย และรีเฟรชไม่ทับข้อมูลเก่า
+        </p>
+        <form id="supabase-form" autocomplete="off" style="margin-top:12px">
           <div class="field">
-            <label>Owner</label>
-            <input type="text" id="s-owner" value="${cfg.owner || ''}" placeholder="username" />
+            <label>Project URL</label>
+            <input type="text" id="s-supabase-url" value="${supaCfg.url}" placeholder="https://xxxx.supabase.co" />
           </div>
           <div class="field">
-            <label>Repository</label>
-            <input type="text" id="s-repo" value="${cfg.repo || ''}" placeholder="finance-data" />
-          </div>
-          <div class="field">
-            <label>Branch</label>
-            <input type="text" id="s-branch" value="${cfg.branch || 'main'}" placeholder="main" />
-          </div>
-          <div class="field">
-            <label>Personal Access Token</label>
-            <input type="password" id="s-token" value="${cfg.token || ''}" placeholder="ghp_..." />
+            <label>Publishable / Anon Key</label>
+            <input type="password" id="s-supabase-key" value="${supaCfg.key}" placeholder="sb_publishable_..." />
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-            <button type="submit" class="btn-primary">บันทึก</button>
-            <button type="button" id="s-test" class="btn-ghost">ทดสอบการเชื่อมต่อ</button>
-            <button type="button" id="s-clear" class="btn-danger" style="margin-left:auto">ลบ Token</button>
+            <button type="submit" class="btn-primary">บันทึก Supabase Key</button>
+            <button type="button" id="s-supabase-test" class="btn-ghost">ทดสอบการเชื่อมต่อ</button>
           </div>
-          <div id="s-result" style="margin-top:12px;font-size:13px"></div>
+          <div id="s-supabase-result" style="margin-top:10px;font-size:13px"></div>
         </form>
       </div>
+
+      <!-- Cloud Migration Card -->
+      <div class="card" style="max-width:480px;margin-top:16px">
+        <h3 class="card-title">จัดการข้อมูล Cloud (One-Click Migration)</h3>
+        <p style="margin-top:4px;font-size:12px;color:var(--text-muted)">
+          ส่งข้อมูลเดิมทั้งหมดในเครื่องขึ้น Supabase ทันที หรือดึงข้อมูลล่าสุดจาก Cloud
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn-primary" id="s-migrate-supabase" style="background:var(--income);border-color:var(--income)">
+            🚀 ส่งข้อมูลในเครื่องขึ้น Supabase (Migration)
+          </button>
+          <button class="btn-ghost" id="s-pull-supabase">
+            🔄 ดึงข้อมูลล่าสุดจาก Supabase (Pull)
+          </button>
+        </div>
+        <div id="s-migrate-result" style="margin-top:10px;font-size:13px"></div>
+      </div>
+
       <div class="card" style="max-width:480px;margin-top:16px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <h3 class="card-title" style="margin:0">AI สแกนสลิป (Gemini Vision)</h3>
@@ -1076,16 +1157,63 @@ async function initSettings(container) {
     </div>
   `;
 
-  document.getElementById('settings-form').addEventListener('submit', async (e) => {
+  document.getElementById('supabase-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    saveConfig({
-      owner:  document.getElementById('s-owner').value.trim(),
-      repo:   document.getElementById('s-repo').value.trim(),
-      branch: document.getElementById('s-branch').value.trim() || 'main',
-      token:  document.getElementById('s-token').value.trim(),
-    });
-    showToast('บันทึกการตั้งค่าแล้ว');
+    const url = document.getElementById('s-supabase-url').value.trim();
+    const key = document.getElementById('s-supabase-key').value.trim();
+    saveSupabaseConfig(url, key);
+    showToast('บันทึกการตั้งค่า Supabase แล้ว ⚡');
   });
+
+  document.getElementById('s-supabase-test')?.addEventListener('click', async () => {
+    const resEl = document.getElementById('s-supabase-result');
+    resEl.textContent = 'กำลังทดสอบเชื่อมต่อ...';
+    resEl.style.color = 'var(--primary)';
+    const r = await testSupabaseConnection();
+    if (r.ok) {
+      resEl.textContent = '✓ เชื่อมต่อกับ Supabase สำเร็จ พร้อมใช้งาน!';
+      resEl.style.color = 'var(--income)';
+    } else {
+      resEl.textContent = `✗ ล้มเหลว: ${r.error || 'HTTP ' + r.status}`;
+      resEl.style.color = 'var(--expense)';
+    }
+  });
+
+  document.getElementById('s-migrate-supabase')?.addEventListener('click', async () => {
+    const ok = await showConfirm(
+      'ส่งข้อมูลขึ้น Supabase',
+      'ระบบจะส่งบัญชี หมวดหมู่ งบประมาณ และรายการทั้งหมดในเครื่องขึ้นไปเก็บบน Supabase ต้องการดำเนินการหรือไม่?'
+    );
+    if (!ok) return;
+    const resEl = document.getElementById('s-migrate-result');
+    resEl.textContent = 'กำลังส่งข้อมูลขึ้น Supabase...';
+    resEl.style.color = 'var(--primary)';
+    try {
+      const stats = await migrateAllToSupabase(store);
+      resEl.textContent = `✓ ส่งข้อมูลสำเร็จ: ${stats.accounts} บัญชี, ${stats.categories} หมวดหมู่, ${stats.budgets} งบประมาณ, ${stats.transactions} รายการ`;
+      resEl.style.color = 'var(--income)';
+      showToast('ส่งข้อมูลขึ้น Supabase สำเร็จทั้งหมดแล้ว! 🎉');
+      updateSyncWidget('synced');
+    } catch (err) {
+      resEl.textContent = `✗ ล้มเหลว: ${err.message}`;
+      resEl.style.color = 'var(--expense)';
+      showToast('เกิดข้อผิดพลาดในการส่งข้อมูล: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('s-pull-supabase')?.addEventListener('click', async () => {
+    updateSyncWidget('syncing');
+    const result = await pullAllFromSupabase(store);
+    if (result.ok) {
+      updateSyncWidget('synced');
+      showToast(`ดึงข้อมูลจาก Supabase สำเร็จ (${result.count} รายการ) ⚡`);
+      navigate(currentPage);
+    } else {
+      updateSyncWidget('error');
+      showToast('ดึงข้อมูลไม่สำเร็จ: ' + result.error, 'error');
+    }
+  });
+
 
   document.getElementById('gemini-key-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1119,15 +1247,16 @@ async function initSettings(container) {
     });
   });
 
-  document.getElementById('s-test').addEventListener('click', async () => {
+  document.getElementById('s-test')?.addEventListener('click', async () => {
     const result = document.getElementById('s-result');
+    if (!result) return;
     result.textContent = 'กำลังทดสอบ...';
     const r = await syncer.testConnection();
     result.textContent = r.ok ? '✓ เชื่อมต่อสำเร็จ' : `✗ ${r.error}`;
     result.style.color = r.ok ? 'var(--income)' : 'var(--expense)';
   });
 
-  document.getElementById('s-clear').addEventListener('click', async () => {
+  document.getElementById('s-clear')?.addEventListener('click', async () => {
     const ok = await showConfirm('ลบ Token', 'ต้องการลบ GitHub token ออกจากเครื่องนี้หรือไม่?');
     if (!ok) return;
     const { clearConfig } = await import('./settings.js');
@@ -1136,7 +1265,7 @@ async function initSettings(container) {
     navigate('settings');
   });
 
-  document.getElementById('s-pull-all').addEventListener('click', async () => {
+  document.getElementById('s-pull-all')?.addEventListener('click', async () => {
     const ok = await showConfirm('ดึงข้อมูลจาก GitHub', 'ข้อมูลใน GitHub จะถูกดึงลงมาและรวมกับข้อมูลในเครื่อง ดำเนินการต่อ?');
     if (!ok) return;
     updateSyncWidget('syncing');
@@ -1150,6 +1279,7 @@ async function initSettings(container) {
       showToast('ดึงข้อมูลไม่สำเร็จ: ' + result.error, 'error');
     }
   });
+
 
   document.getElementById('s-export-all').addEventListener('click', async () => {
     const [txs, activeAccs, archivedAccs, cats, budgets] = await Promise.all([

@@ -1,4 +1,4 @@
-const CACHE = 'ft-v2.4';
+const CACHE = 'ft-v3.0';
 
 const SHELL = [
   './',
@@ -11,6 +11,7 @@ const SHELL = [
   './js/schema.js',
   './js/settings.js',
   './js/sync.js',
+  './js/supabase-client.js',
   './js/format.js',
   './js/export.js',
   './js/habit-engine.js',
@@ -21,6 +22,7 @@ const SHELL = [
   './js/pages/analytics.js',
   './js/pages/accounts.js',
 ];
+
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
