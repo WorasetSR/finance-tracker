@@ -507,3 +507,147 @@ export function exportTransactions(
 
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
+
+// ── Complete JSON Vault Backup & Restore ─────────────────────
+
+export async function exportFullJsonBackup(store) {
+  const [transactions, accounts, categories, budgets] = await Promise.all([
+    store.getAllRaw('transactions'),
+    store.getAllRaw('accounts'),
+    store.getAllRaw('categories'),
+    store.getAllRaw('budgets'),
+  ]);
+
+  let subscriptions = [];
+  try {
+    subscriptions = JSON.parse(localStorage.getItem('ft_subscriptions') || '[]');
+  } catch (e) {
+    subscriptions = [];
+  }
+
+  let habitAssociations = {};
+  let habitBankAccs = {};
+  try {
+    habitAssociations = JSON.parse(localStorage.getItem('ft_habit_associations') || '{}');
+    habitBankAccs = JSON.parse(localStorage.getItem('ft_habit_bank_accs') || '{}');
+  } catch (e) {}
+
+  const backupData = {
+    metadata: {
+      app: 'Finance Tracker',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      counts: {
+        transactions: transactions.length,
+        accounts: accounts.length,
+        categories: categories.length,
+        budgets: budgets.length,
+        subscriptions: subscriptions.length,
+      },
+    },
+    accounts,
+    categories,
+    budgets,
+    transactions,
+    subscriptions,
+    habitEngine: {
+      associations: habitAssociations,
+      bankAccounts: habitBankAccs,
+    },
+  };
+
+  const jsonStr = JSON.stringify(backupData, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `finance-tracker-vault-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return backupData.metadata;
+}
+
+export async function importFullJsonBackup(jsonString, store) {
+  let data;
+  try {
+    data = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+  } catch (err) {
+    throw new Error('ไฟล์สำรองไม่ถูกต้อง ไม่สามารถแปลงข้อมูล JSON ได้');
+  }
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('รูปแบบไฟล์สำรองไม่ถูกต้อง');
+  }
+
+  if (!data.accounts && !data.categories && !data.transactions && !data.budgets) {
+    throw new Error('ไม่พบข้อมูลบัญชี หมวดหมู่ หรือรายการธุรกรรมในไฟล์สำรอง');
+  }
+
+  let accCount = 0;
+  if (Array.isArray(data.accounts)) {
+    for (const acc of data.accounts) {
+      if (acc && acc.id) {
+        await store.put('accounts', acc);
+        accCount++;
+      }
+    }
+  }
+
+  let catCount = 0;
+  if (Array.isArray(data.categories)) {
+    for (const cat of data.categories) {
+      if (cat && cat.id) {
+        await store.put('categories', cat);
+        catCount++;
+      }
+    }
+  }
+
+  let budgetCount = 0;
+  if (Array.isArray(data.budgets)) {
+    for (const b of data.budgets) {
+      if (b && b.id) {
+        await store.put('budgets', b);
+        budgetCount++;
+      }
+    }
+  }
+
+  let txCount = 0;
+  if (Array.isArray(data.transactions)) {
+    for (const tx of data.transactions) {
+      if (tx && tx.id) {
+        await store.put('transactions', tx);
+        txCount++;
+      }
+    }
+  }
+
+  let subCount = 0;
+  if (Array.isArray(data.subscriptions)) {
+    localStorage.setItem('ft_subscriptions', JSON.stringify(data.subscriptions));
+    subCount = data.subscriptions.length;
+  }
+
+  if (data.habitEngine) {
+    if (data.habitEngine.associations) {
+      localStorage.setItem('ft_habit_associations', JSON.stringify(data.habitEngine.associations));
+    }
+    if (data.habitEngine.bankAccounts) {
+      localStorage.setItem('ft_habit_bank_accs', JSON.stringify(data.habitEngine.bankAccounts));
+    }
+  }
+
+  return {
+    ok: true,
+    txCount,
+    accCount,
+    catCount,
+    budgetCount,
+    subCount,
+  };
+}
+

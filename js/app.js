@@ -27,7 +27,7 @@ import { parseAmount, formatTHB, formatMonth } from './format.js';
 import { parseSlipImage, matchBankToAccount, compressImage } from './slip-parser.js';
 import { suggestCategory, learnHabit, getHabitData } from './habit-engine.js';
 import { getSubscriptions, saveSubscription, deleteSubscription, paySubscription, getUpcomingBills } from './subscriptions.js';
-import { exportTransactions }            from './export.js';
+import { exportTransactions, exportFullJsonBackup, importFullJsonBackup } from './export.js';
 import { initDashboard }                 from './pages/dashboard.js';
 import { initTransactions }              from './pages/transactions.js';
 import { initBudget }                    from './pages/budget.js';
@@ -1730,11 +1730,31 @@ async function initSettings(container) {
           `).join('')}
         </div>
       </div>
+      <!-- Complete JSON Vault Backup & Restore -->
       <div class="card" style="max-width:480px;margin-top:16px">
-        <h3 class="card-title">ข้อมูล</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h3 class="card-title" style="margin:0">สำรองและกู้คืนข้อมูล (Vault Backup)</h3>
+          <span class="badge badge-neutral">Full JSON 🛡️</span>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
+          สำรองข้อมูลทั้งหมด (บัญชี, หมวดหมู่, งบประมาณ, รายการธุรกรรม, รายจ่ายประจำ และ Habit Engine) เก็บไว้เป็นไฟล์ .json และกู้คืนได้ทุกเมื่อ
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn-primary" id="s-backup-json" style="background:var(--primary);border-color:var(--primary)">
+            📥 ดาวน์โหลดข้อมูลทั้งหมด (.json)
+          </button>
+          <button class="btn-ghost" id="s-restore-json">
+            📤 กู้คืนข้อมูลจากไฟล์ (.json)
+          </button>
+          <input type="file" id="s-restore-input" accept=".json,application/json" class="hidden" />
+        </div>
+      </div>
+
+      <div class="card" style="max-width:480px;margin-top:16px">
+        <h3 class="card-title">ส่งออกและจัดการข้อมูล</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-ghost" id="s-export-all">Export ข้อมูลเป็น Excel (.xlsx)</button>
           <button class="btn-ghost" id="s-pull-all">ดึงข้อมูลจาก GitHub</button>
-          <button class="btn-ghost" id="s-export-all">Export ข้อมูลทั้งหมด (.xlsx)</button>
           <button class="btn-danger" id="s-clear-cache">ล้างข้อมูลใน Cache</button>
         </div>
         <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
@@ -1867,6 +1887,44 @@ async function initSettings(container) {
     }
   });
 
+
+  // Full JSON Backup & Restore handlers
+  document.getElementById('s-backup-json')?.addEventListener('click', async () => {
+    try {
+      const meta = await exportFullJsonBackup(store);
+      showToast(`ดาวน์โหลดไฟล์สำรองเรียบร้อย (${meta.counts.transactions} รายการ, ${meta.counts.accounts} บัญชี) 🛡️`);
+    } catch (err) {
+      showToast('เกิดข้อผิดพลาดในการสำรองข้อมูล: ' + err.message, 'error');
+    }
+  });
+
+  const restoreInput = document.getElementById('s-restore-input');
+  document.getElementById('s-restore-json')?.addEventListener('click', () => {
+    restoreInput?.click();
+  });
+
+  restoreInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ok = await showConfirm(
+      'ยืนยันการกู้คืนข้อมูล',
+      `คุณต้องการกู้คืนข้อมูลจากไฟล์ "${file.name}" หรือไม่? ข้อมูลจะถูกนำเข้าและบันทึกลงในเครื่องทันที`
+    );
+    if (!ok) {
+      restoreInput.value = '';
+      return;
+    }
+    try {
+      const text = await file.text();
+      const res = await importFullJsonBackup(text, store);
+      showToast(`กู้คืนข้อมูลสำเร็จ! (${res.txCount} รายการ, ${res.accCount} บัญชี, ${res.subCount} รายจ่ายประจำ) ✅`);
+      setTimeout(() => location.reload(), 900);
+    } catch (err) {
+      showToast('กู้คืนข้อมูลไม่สำเร็จ: ' + err.message, 'error');
+    } finally {
+      restoreInput.value = '';
+    }
+  });
 
   document.getElementById('s-export-all').addEventListener('click', async () => {
     const [txs, activeAccs, archivedAccs, cats, budgets] = await Promise.all([

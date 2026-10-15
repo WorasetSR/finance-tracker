@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-//  pages/transactions.js — List & Daily Calendar View
+//  pages/transactions.js — List, Daily Calendar View & Smart Search
 //  Finance Tracker v2
 // ─────────────────────────────────────────────────────────────
 
@@ -12,11 +12,13 @@ export async function initTransactions(container, store, { openTxModal, showToas
   let filterType   = 'all';  // 'all' | 'income' | 'expense' | 'transfer'
   let filterAccId  = '';
   let filterCatId  = '';
+  let searchQuery  = '';
+  let activeTag    = '';
   let viewMode     = 'list'; // 'list' | 'calendar'
   let selectedDate = todayStr().startsWith(month) ? todayStr() : `${month}-01`;
 
-  async function render() {
-    const [txs, accounts, categories] = await Promise.all([
+  async function render(preserveSearchFocus = false) {
+    const [allMonthTxs, accounts, categories] = await Promise.all([
       store.getTransactions({ month, type: filterType === 'all' ? undefined : filterType, accountId: filterAccId || undefined, categoryId: filterCatId || undefined }),
       store.getAccounts(),
       store.getCategories(),
@@ -24,6 +26,27 @@ export async function initTransactions(container, store, { openTxModal, showToas
 
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const accMap = Object.fromEntries(accounts.map(a => [a.id, a]));
+
+    // Extract hashtags from all month transactions
+    const allTags = extractTags(allMonthTxs);
+
+    // Apply Real-Time Search & Tag Filtering
+    let txs = allMonthTxs;
+    if (activeTag) {
+      txs = txs.filter(t => (t.note || '').includes(activeTag));
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase().trim();
+      txs = txs.filter(t => {
+        const cat = catMap[t.categoryId]?.name?.toLowerCase() || '';
+        const acc = accMap[t.accountId || t.fromAccountId]?.name?.toLowerCase() || '';
+        const toAcc = accMap[t.toAccountId]?.name?.toLowerCase() || '';
+        const note = (t.note || '').toLowerCase();
+        const amt = (t.amountMinor / 100).toString();
+        const friend = (t.advanceTo || '').toLowerCase();
+        return note.includes(q) || cat.includes(q) || acc.includes(q) || toAcc.includes(q) || amt.includes(q) || friend.includes(q);
+      });
+    }
 
     // Group by date
     const groups = groupByDate(txs);
@@ -63,6 +86,27 @@ export async function initTransactions(container, store, { openTxModal, showToas
       </div>
 
       <div class="page-body">
+        <!-- Search & Tag Bar -->
+        <div class="tx-search-bar" style="margin-bottom:12px">
+          <div class="search-input-wrap">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="search" id="tx-search-input" placeholder="ค้นหารายการ, โน้ต, #แท็ก, หมวด, หรือจำนวนเงิน..." value="${searchQuery}" autocomplete="off" />
+            ${searchQuery ? `<button type="button" id="btn-clear-search" class="search-clear-btn" title="ล้างการค้นหา">×</button>` : ''}
+          </div>
+          ${allTags.length > 0 ? `
+            <div class="tag-chips-wrap">
+              ${allTags.map(tag => `
+                <button type="button" class="tag-chip ${activeTag === tag ? 'active' : ''}" data-tag="${tag}">
+                  ${tag}
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+
         <!-- Filters -->
         <div class="filters-bar">
           <div class="filter-tabs">
@@ -88,16 +132,57 @@ export async function initTransactions(container, store, { openTxModal, showToas
           <span class="income">+${formatTHB(txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amountMinor, 0))}</span>
           <span class="divider">|</span>
           <span class="expense">-${formatTHB(txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amountMinor, 0))}</span>
-          <span class="tx-count">${txs.length} รายการ</span>
+          <span class="tx-count">${txs.length} รายการ ${searchQuery || activeTag ? '(ผลการค้นหา)' : ''}</span>
         </div>
 
-        ${viewMode === 'calendar' ? renderCalendarView(month, txs, selectedDate, catMap, accMap) : renderListView(groupKeys, groups, catMap, accMap)}
+        ${viewMode === 'calendar' ? renderCalendarView(month, txs, selectedDate, catMap, accMap) : renderListView(groupKeys, groups, catMap, accMap, searchQuery || activeTag)}
       </div>
     `;
 
     // Restore filter values
     if (filterAccId) document.getElementById('filter-acc').value = filterAccId;
     if (filterCatId) document.getElementById('filter-cat').value = filterCatId;
+
+    // Preserve search focus if requested
+    if (preserveSearchFocus) {
+      const searchInp = document.getElementById('tx-search-input');
+      if (searchInp) {
+        searchInp.focus();
+        searchInp.setSelectionRange(searchInp.value.length, searchInp.value.length);
+      }
+    }
+
+    // Search input handler
+    const searchInp = document.getElementById('tx-search-input');
+    searchInp?.addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      render(true);
+    });
+
+    document.getElementById('btn-clear-search')?.addEventListener('click', () => {
+      searchQuery = '';
+      activeTag = '';
+      render();
+    });
+
+    // Tag chips click
+    container.querySelectorAll('.tag-chip[data-tag]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const clickedTag = chip.dataset.tag;
+        activeTag = (activeTag === clickedTag) ? '' : clickedTag;
+        render();
+      });
+    });
+
+    // Reset filters button in empty search state
+    document.getElementById('btn-reset-filters')?.addEventListener('click', () => {
+      searchQuery = '';
+      activeTag = '';
+      filterType = 'all';
+      filterAccId = '';
+      filterCatId = '';
+      render();
+    });
 
     // Bind navigation & filters
     document.getElementById('prev-month')?.addEventListener('click', () => { month = offsetMonth(month, -1); render(); });
@@ -155,8 +240,17 @@ export async function initTransactions(container, store, { openTxModal, showToas
 
 // ── Render Views ──────────────────────────────────────────────
 
-function renderListView(groupKeys, groups, catMap, accMap) {
+function renderListView(groupKeys, groups, catMap, accMap, isFiltered = false) {
   if (!groupKeys.length) {
+    if (isFiltered) {
+      return `
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <p>ไม่พบรายการที่ตรงกับคำค้นหาหรือตัวกรอง</p>
+          <button type="button" class="btn-ghost" id="btn-reset-filters" style="border:1px solid var(--border);margin-top:8px">ล้างคำค้นหา</button>
+        </div>
+      `;
+    }
     return `
       <div class="empty-state">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
@@ -305,6 +399,19 @@ function renderTxRow(tx, catMap, accMap) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────
+
+function extractTags(txs) {
+  const tagSet = new Set();
+  const tagRegex = /#([\wก-๙]+)/g;
+  for (const tx of txs) {
+    if (!tx.note) continue;
+    let match;
+    while ((match = tagRegex.exec(tx.note)) !== null) {
+      tagSet.add('#' + match[1]);
+    }
+  }
+  return Array.from(tagSet);
+}
 
 function groupByDate(txs) {
   return txs.reduce((acc, tx) => {

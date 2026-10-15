@@ -1,10 +1,11 @@
 // ─────────────────────────────────────────────────────────────
-//  pages/analytics.js
+//  pages/analytics.js — Advanced Financial Analytics & MoM
 //  Finance Tracker v2
 // ─────────────────────────────────────────────────────────────
 
 import { formatTHB, formatMonthShort, thaiMonthNames } from '../format.js';
 import { currentMonth } from '../schema.js';
+import { getSubscriptions } from '../subscriptions.js';
 
 let barChart    = null;
 let pieChart    = null;
@@ -39,7 +40,7 @@ export async function initAnalytics(container, store) {
     pieSection.innerHTML = `
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">รายจ่ายตามหมวด</h2>
+          <h2 class="card-title">รายจ่ายตามหมวดหมู่</h2>
           <div class="cat-month-nav">
             <button class="icon-btn" id="cat-prev-month" title="เดือนก่อน">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -54,15 +55,20 @@ export async function initAnalytics(container, store) {
           <div class="chart-wrap chart-wrap-donut">
             <canvas id="pie-chart"></canvas>
           </div>
-          <div class="cat-legend">
-            ${catBreakdown.slice(0, 6).map((e, i) => {
+          <!-- Category Ranking Progress Bars -->
+          <div class="cat-ranking-list">
+            ${catBreakdown.map((e, i) => {
               const pct = totalExp > 0 ? Math.round((e.total / totalExp) * 100) : 0;
+              const color = PIE_COLORS[i % PIE_COLORS.length];
               return `
-                <div class="legend-item">
-                  <span class="legend-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
-                  <span class="legend-label">${e.cat.icon || ''} ${e.cat.name}</span>
-                  <span class="legend-pct">${pct}%</span>
-                  <span class="legend-value mono">${formatTHB(e.total)}</span>
+                <div class="cat-bar-item">
+                  <div class="cat-bar-header">
+                    <span class="cat-bar-name">${e.cat.icon || '📦'} ${e.cat.name}</span>
+                    <span class="cat-bar-val mono">${formatTHB(e.total)} <span class="cat-bar-pct">(${pct}%)</span></span>
+                  </div>
+                  <div class="cat-progress-bg">
+                    <div class="cat-progress-fill" style="width:${pct}%;background:${color}"></div>
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -94,19 +100,115 @@ export async function initAnalytics(container, store) {
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const monthData = await Promise.all(months.map(m => store.getMonthSummary(m)));
 
+    const curMonthData = monthData[monthData.length - 1]; // current active month (endMonth)
+    const prevMonthData = monthData[monthData.length - 2] || { income: 0, expense: 0, net: 0 };
+
+    // Month-over-Month calculation
+    const expDiff = curMonthData.expense - prevMonthData.expense;
+    const expPct = prevMonthData.expense > 0 ? Math.round((expDiff / prevMonthData.expense) * 100) : 0;
+
+    const incDiff = curMonthData.income - prevMonthData.income;
+    const incPct = prevMonthData.income > 0 ? Math.round((incDiff / prevMonthData.income) * 100) : 0;
+
     const savingRates = monthData.map(d => d.income > 0 ? Math.round((d.net / d.income) * 100) : 0);
+    const curSavingRate = savingRates[savingRates.length - 1];
+
+    let healthLabel = 'พอดีตัว';
+    let healthClass = 'neutral';
+    if (curSavingRate >= 30) {
+      healthLabel = 'ยอดเยี่ยม (>30%) 🌟';
+      healthClass = 'better';
+    } else if (curSavingRate >= 15) {
+      healthLabel = 'สุขภาพดี (15-30%) 🎯';
+      healthClass = 'better';
+    } else if (curSavingRate >= 0) {
+      healthLabel = 'พอดีตัว (0-15%) ⚖️';
+      healthClass = 'neutral';
+    } else {
+      healthLabel = 'ติดลบ (เกินรายรับ) ⚠️';
+      healthClass = 'worse';
+    }
+
+    // Subscriptions fixed expenses
+    const subs = getSubscriptions();
+    const totalFixedMinor = subs.reduce((s, sub) => s + (sub.amountMinor || 0), 0);
+    const fixedPct = curMonthData.expense > 0 ? Math.min(100, Math.round((totalFixedMinor / curMonthData.expense) * 100)) : 0;
+    const varPct = Math.max(0, 100 - fixedPct);
 
     container.innerHTML = `
       <div class="page-header">
-        <h1 class="page-title">วิเคราะห์</h1>
-        <span class="page-subtitle">${formatMonthShort(months[0])} – ${formatMonthShort(endMonth)}</span>
+        <div>
+          <h1 class="page-title">วิเคราะห์</h1>
+          <span class="page-subtitle">${formatMonthShort(months[0])} – ${formatMonthShort(endMonth)}</span>
+        </div>
       </div>
 
       <div class="page-body">
+        <!-- Month-over-Month Comparison Grid -->
+        <div class="mom-grid">
+          <div class="mom-card">
+            <div class="mom-header">
+              <span class="mom-label">รายจ่ายเดือนนี้ (${formatMonthShort(endMonth)})</span>
+              <span class="mom-pill ${expDiff <= 0 ? 'better' : 'worse'}">
+                ${expDiff <= 0 ? '↓' : '↑'} ${Math.abs(expPct)}% ${expDiff <= 0 ? 'ลดลง' : 'เพิ่มขึ้น'}
+              </span>
+            </div>
+            <div class="mom-value expense">${formatTHB(curMonthData.expense)}</div>
+            <div class="stat-sub">
+              ${expDiff <= 0 ? 'ประหยัดกว่าเดือนก่อน ' : 'ใช้มากกว่าเดือนก่อน '}
+              <span class="mono">${formatTHB(Math.abs(expDiff))}</span>
+            </div>
+          </div>
+
+          <div class="mom-card">
+            <div class="mom-header">
+              <span class="mom-label">รายรับเดือนนี้</span>
+              <span class="mom-pill ${incDiff >= 0 ? 'better' : 'neutral'}">
+                ${incDiff >= 0 ? '↑' : '↓'} ${Math.abs(incPct)}%
+              </span>
+            </div>
+            <div class="mom-value income">${formatTHB(curMonthData.income)}</div>
+            <div class="stat-sub">
+              เทียบเดือนก่อน ${incDiff >= 0 ? '+' : '-'}<span class="mono">${formatTHB(Math.abs(incDiff))}</span>
+            </div>
+          </div>
+
+          <div class="mom-card">
+            <div class="mom-header">
+              <span class="mom-label">คงเหลือสุทธิ & อัตราออม</span>
+              <span class="mom-pill ${healthClass}">
+                ${healthLabel}
+              </span>
+            </div>
+            <div class="mom-value ${curMonthData.net >= 0 ? 'income' : 'expense'}">${formatTHB(curMonthData.net)}</div>
+            <div class="stat-sub">
+              อัตราการออมเดือนนี้ <strong class="mono ${curSavingRate >= 0 ? 'income' : 'expense'}">${curSavingRate}%</strong>
+            </div>
+          </div>
+        </div>
+
+        ${totalFixedMinor > 0 ? `
+          <!-- Fixed vs Variable Expenses Ratio Card -->
+          <div class="card" style="margin-bottom:20px;padding:16px 18px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:13px;font-weight:600;color:var(--text)">สัดส่วนรายจ่ายประจำคงที่ vs ผันแปร</span>
+              <span class="badge badge-neutral" style="font-size:11px">Subscriptions & Bills</span>
+            </div>
+            <div class="fixed-ratio-bar">
+              <div class="fixed-ratio-fill" style="width:${fixedPct}%;background:#6366F1" title="รายจ่ายประจำ ${fixedPct}%"></div>
+              <div class="fixed-ratio-fill" style="width:${varPct}%;background:#14B8A6" title="รายจ่ายผันแปร ${varPct}%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary)">
+              <span><span style="color:#6366F1;font-weight:700">●</span> ประจำ: <span class="mono font-semibold">${formatTHB(totalFixedMinor)} (${fixedPct}%)</span></span>
+              <span><span style="color:#14B8A6;font-weight:700">●</span> ผันแปร: <span class="mono font-semibold">${formatTHB(Math.max(0, curMonthData.expense - totalFixedMinor))} (${varPct}%)</span></span>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Income vs Expense bar chart -->
         <div class="card">
           <div class="card-header">
-            <h2 class="card-title">รายรับ vs รายจ่าย</h2>
+            <h2 class="card-title">รายรับ vs รายจ่าย (6 เดือนย้อนหลัง)</h2>
           </div>
           <div class="chart-wrap">
             <canvas id="bar-chart"></canvas>
@@ -120,7 +222,7 @@ export async function initAnalytics(container, store) {
           <!-- Saving rate trend -->
           <div class="card">
             <div class="card-header">
-              <h2 class="card-title">อัตราออม</h2>
+              <h2 class="card-title">แนวโน้มอัตราออม</h2>
             </div>
             <div class="chart-wrap">
               <canvas id="trend-chart"></canvas>
