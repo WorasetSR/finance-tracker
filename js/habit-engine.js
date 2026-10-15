@@ -20,14 +20,15 @@ const HABIT_KEY = 'ft_habit_map';
 export function getHabitData() {
   try {
     const raw = localStorage.getItem(HABIT_KEY);
-    if (!raw) return { memos: {}, payees: {} };
+    if (!raw) return { memos: {}, payees: {}, banks: {} };
     const parsed = JSON.parse(raw);
     return {
       memos:  parsed.memos  || {},
       payees: parsed.payees || {},
+      banks:  parsed.banks  || {},
     };
   } catch {
-    return { memos: {}, payees: {} };
+    return { memos: {}, payees: {}, banks: {} };
   }
 }
 
@@ -48,25 +49,37 @@ function saveHabitData(data) {
  * @param {Object} opts
  * @param {string} [opts.memo]
  * @param {string} [opts.payeeKey]
- * @param {string} opts.categoryId
+ * @param {string} [opts.categoryId]
+ * @param {string} [opts.bankOrApp]
+ * @param {string} [opts.accountId]
  */
-export function learnHabit({ memo, payeeKey, categoryId }) {
-  if (!categoryId) return;
+export function learnHabit({ memo, payeeKey, categoryId, bankOrApp, accountId }) {
   const data = getHabitData();
 
-  if (payeeKey && typeof payeeKey === 'string') {
-    const pKey = payeeKey.trim();
-    if (pKey) {
-      data.payees[pKey] = data.payees[pKey] || {};
-      data.payees[pKey][categoryId] = (data.payees[pKey][categoryId] || 0) + 1;
+  if (categoryId) {
+    if (payeeKey && typeof payeeKey === 'string') {
+      const pKey = payeeKey.trim();
+      if (pKey) {
+        data.payees[pKey] = data.payees[pKey] || {};
+        data.payees[pKey][categoryId] = (data.payees[pKey][categoryId] || 0) + 1;
+      }
+    }
+
+    if (memo && typeof memo === 'string') {
+      const cleaned = memo.trim();
+      if (cleaned) {
+        data.memos[cleaned] = data.memos[cleaned] || {};
+        data.memos[cleaned][categoryId] = (data.memos[cleaned][categoryId] || 0) + 1;
+      }
     }
   }
 
-  if (memo && typeof memo === 'string') {
-    const cleaned = memo.trim();
-    if (cleaned) {
-      data.memos[cleaned] = data.memos[cleaned] || {};
-      data.memos[cleaned][categoryId] = (data.memos[cleaned][categoryId] || 0) + 1;
+  // Learn bank / app to user account mapping dynamically
+  if (bankOrApp && typeof bankOrApp === 'string' && accountId) {
+    const bKey = bankOrApp.toLowerCase().trim();
+    if (bKey) {
+      data.banks = data.banks || {};
+      data.banks[bKey] = accountId;
     }
   }
 

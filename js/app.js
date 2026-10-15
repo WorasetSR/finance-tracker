@@ -9,7 +9,7 @@ import { GitHubSync }                    from './sync.js';
 import { makeTransaction, makeAccount, makeCategory, makeBudget, todayStr, currentMonth } from './schema.js';
 import { parseAmount, formatTHB, formatMonth } from './format.js';
 import { parseSlipImage, matchBankToAccount } from './slip-parser.js';
-import { suggestCategory, learnHabit }   from './habit-engine.js';
+import { suggestCategory, learnHabit, getHabitData } from './habit-engine.js';
 import { exportTransactions }            from './export.js';
 import { initDashboard }                 from './pages/dashboard.js';
 import { initTransactions }              from './pages/transactions.js';
@@ -589,7 +589,8 @@ async function populateSlipPreview(parsed) {
     accSelect.innerHTML = accounts
       .map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`)
       .join('');
-    const matchedAccId = matchBankToAccount(parsed.bank, accounts);
+    const habitData = getHabitData();
+    const matchedAccId = matchBankToAccount(parsed.bank, accounts, habitData);
     if (matchedAccId) accSelect.value = matchedAccId;
   }
 
@@ -645,11 +646,13 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
   await store.put('transactions', tx);
   await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
 
-  // Train habit engine on confirmed categorization
+  // Train habit engine on confirmed categorization and dynamic bank-to-account mapping
   learnHabit({
     memo: note,
     payeeKey: currentParsedData?.payeeAccount,
     categoryId,
+    bankOrApp: currentParsedData?.bank,
+    accountId,
   });
 
   updateSyncWidget('pending');

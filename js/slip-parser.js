@@ -5,7 +5,11 @@
 //  Does NOT extract personal names for privacy.
 // ─────────────────────────────────────────────────────────────
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const CANDIDATE_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
 
 /**
  * Convert a File or Blob into a base64 string.
@@ -55,7 +59,7 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
   "amount": number (e.g. 150.00),
   "date": string in "YYYY-MM-DD" format (convert Thai Buddhist era year to Christian era, e.g. 2569 -> 2026),
   "time": string in "HH:MM" format (24-hour),
-  "bank": string of the sender's bank code (e.g. "KBANK", "SCB", "KTB", "BBL", "TTB", "BAY", "GSB"),
+  "bank": string of the sender bank, financial institution, or app name seen on the slip (e.g. "MAKE by KBank", "KBank", "SCB", "Krungthai", "Dime", "TrueMoney", "LHBANK", etc.),
   "memo": string containing ONLY the transfer note / memo / "บันทึกช่วยจำ" that the sender typed. If there is no memo note, return "". IMPORTANT: DO NOT include the receiver's person name or merchant name here.
   "bankCategoryTag": string of any built-in category tag printed on the slip by the bank (e.g. K PLUS "อาหารและเครื่องดื่ม", "ช้อปปิ้ง", "บิล"). If none, return "".
   "payeeAccount": string of the masked receiver account number or promptpay (e.g. "xxx-1234"). If none, return ""
@@ -81,19 +85,42 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
     },
   };
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey.trim()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  let response;
+  let lastErrorMsg = '';
 
-  if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}));
-    const message = errBody.error?.message || `HTTP ${response.status}`;
-    if (response.status === 400 || response.status === 403) {
-      throw new Error(`Gemini API Error: ${message} (กรุณาตรวจสอบ API Key)`);
+  for (const model of CANDIDATE_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        break;
+      }
+
+      const errBody = await response.clone().json().catch(() => ({}));
+      lastErrorMsg = errBody.error?.message || `HTTP ${response.status}`;
+
+      // If model deprecated or not found, continue to next candidate model
+      if (response.status === 404 || lastErrorMsg.includes('no longer available') || lastErrorMsg.includes('not found')) {
+        continue;
+      }
+
+      // For auth or permission errors, stop immediately
+      if (response.status === 400 || response.status === 403) {
+        throw new Error(`Gemini API Error: ${lastErrorMsg} (กรุณาตรวจสอบ API Key)`);
+      }
+    } catch (err) {
+      if (err.message.includes('API Key')) throw err;
+      lastErrorMsg = err.message;
     }
-    throw new Error(`วิเคราะห์สลิปล้มเหลว: ${message}`);
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(`วิเคราะห์สลิปล้มเหลว: ${lastErrorMsg || 'ไม่สามารถเรียกใช้ Gemini Flash ได้'}`);
   }
 
   const resJson = await response.json();
@@ -126,7 +153,7 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
     amountMinor,
     date,
     time:            parsed.time            || '',
-    bank:            (parsed.bank           || '').toUpperCase(),
+    bank:            (parsed.bank           || '').trim(),
     memo:            parsed.memo            || '',
     bankCategoryTag: parsed.bankCategoryTag || '',
     payeeAccount:    parsed.payeeAccount    || '',
@@ -134,30 +161,45 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
 }
 
 /**
- * Match bank code (e.g. KBANK, SCB, KTB) to local user accounts.
- * @param {string} bankCode
+ * Match sender bank/app dynamically to local user accounts without hardcoding.
+ * Priority:
+ * 1. Learned habit mapping (Habit Engine)
+ * 2. Exact or substring name match with user accounts
+ * 3. Token-based word overlap
+ * 4. First active account fallback
+ *
+ * @param {string} bankOrApp
  * @param {Array<{id: string, name: string}>} accounts
+ * @param {Object} [habitData]
  * @returns {string|null} accountId or null
  */
-export function matchBankToAccount(bankCode, accounts = []) {
-  if (!bankCode || !accounts.length) return null;
-  const code = bankCode.toUpperCase();
+export function matchBankToAccount(bankOrApp, accounts = [], habitData = null) {
+  if (!accounts.length) return null;
+  if (!bankOrApp) return accounts[0]?.id || null;
 
-  const BANK_KEYWORDS = {
-    KBANK: ['กสิกร', 'kbank', 'k plus'],
-    SCB:   ['ไทยพาณิชย์', 'scb', 'easy'],
-    KTB:   ['กรุงไทย', 'ktb', 'next'],
-    BBL:   ['กรุงเทพ', 'bbl', 'bualuang'],
-    TTB:   ['ทีเอ็มบี', 'ทหารไทย', 'ttb', 'tmb'],
-    BAY:   ['กรุงศรี', 'bay'],
-    GSB:   ['ออมสิน', 'gsb'],
-  };
+  const raw = bankOrApp.toLowerCase().trim();
 
-  const keywords = BANK_KEYWORDS[code] || [code.toLowerCase()];
+  // 1. Check learned habit mapping from past confirmations
+  if (habitData?.banks && habitData.banks[raw]) {
+    const learnedId = habitData.banks[raw];
+    if (accounts.some(a => a.id === learnedId)) {
+      return learnedId;
+    }
+  }
 
+  // 2. Direct string inclusion (e.g. account named "Make by KBank" vs "Make")
   for (const acc of accounts) {
     const accName = acc.name.toLowerCase();
-    if (keywords.some(k => accName.includes(k))) {
+    if (accName.includes(raw) || raw.includes(accName)) {
+      return acc.id;
+    }
+  }
+
+  // 3. Token-based word overlap (e.g. ["make", "kbank", "dime", "scb"])
+  const tokens = raw.split(/[\s\-_/]+/).filter(t => t.length >= 2);
+  for (const acc of accounts) {
+    const accName = acc.name.toLowerCase();
+    if (tokens.some(t => accName.includes(t))) {
       return acc.id;
     }
   }
