@@ -6,6 +6,7 @@
 import { formatTHB, formatMonth, formatDateRelative } from '../format.js';
 import { currentMonth, makeTransaction, todayStr } from '../schema.js';
 import { syncTransaction } from '../supabase-client.js';
+import { getUpcomingBills, paySubscription } from '../subscriptions.js';
 
 let chartInstance = null;
 
@@ -82,6 +83,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
     const topCats = Object.values(catTotals).sort((a, b) => b.total - a.total).slice(0, 5);
 
     const recent = txs.slice(0, 8);
+    const upcomingBills = getUpcomingBills(14);
 
     const savingRate = summary.income > 0
       ? Math.round((summary.net / summary.income) * 100)
@@ -202,6 +204,42 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
           </div>
         ` : ''}
 
+        ${upcomingBills && upcomingBills.length > 0 ? `
+          <!-- Subscriptions & Upcoming Bills -->
+          <div class="card" id="card-subscriptions">
+            <div class="card-header">
+              <h2 class="card-title">🔔 รอบบิลประจำที่ใกล้ถึง (${upcomingBills.filter(b => !b.isPaid).length})</h2>
+              <button class="link-btn" data-page="budget">ดูทั้งหมด / จัดการ →</button>
+            </div>
+            <div class="subs-list">
+              ${upcomingBills.slice(0, 4).map(b => `
+                <div class="sub-item-card" data-sub-id="${b.sub.id}">
+                  <div class="sub-left">
+                    <span class="sub-icon">${b.sub.icon || '📱'}</span>
+                    <div class="sub-details">
+                      <span class="sub-name">
+                        ${b.sub.name}
+                        <span class="sub-urgency-badge ${b.urgency}">${b.label}</span>
+                      </span>
+                      <span class="sub-meta">ตัดทุกวันที่ ${b.dueDay} ของเดือน</span>
+                    </div>
+                  </div>
+                  <div class="sub-right">
+                    <span class="mono" style="font-weight:700">${formatTHB(b.sub.amountMinor)}</span>
+                    ${!b.isPaid ? `
+                      <button type="button" class="btn-primary btn-sm btn-pay-sub" data-sub-id="${b.sub.id}" style="padding:4px 10px;font-size:12px">
+                        ✓ ชำระแล้ว
+                      </button>
+                    ` : `
+                      <span style="font-size:12px;color:var(--income);font-weight:600">✓ จ่ายแล้ว</span>
+                    `}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Recent transactions -->
         <div class="card">
           <div class="card-header">
@@ -293,6 +331,24 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
 
         showToast(`บันทึกรับเงินคืนจาก ${friendName} เรียบร้อยแล้ว 🎉`);
         render();
+      });
+    });
+
+    // 1-Click Pay Subscription Bill
+    container.querySelectorAll('.btn-pay-sub').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const subId = btn.dataset.subId;
+        const ok = await showConfirm('ยืนยันชำระบิล', 'ต้องการบันทึกการชำระเงินสำหรับรอบบิลนี้เข้าบัญชีหรือไม่?');
+        if (!ok) return;
+
+        try {
+          await paySubscription(subId, store);
+          showToast('บันทึกการชำระบิลเรียบร้อยแล้ว ✓');
+          render();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
       });
     });
 

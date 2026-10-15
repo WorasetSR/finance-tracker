@@ -22,10 +22,11 @@ import {
   saveSupabaseConfig,
   testSupabaseConnection,
 } from './supabase-client.js';
-import { makeTransaction, makeAccount, makeCategory, makeBudget, todayStr, currentMonth } from './schema.js';
+import { makeTransaction, makeAccount, makeCategory, makeBudget, genId, todayStr, currentMonth } from './schema.js';
 import { parseAmount, formatTHB, formatMonth } from './format.js';
 import { parseSlipImage, matchBankToAccount, compressImage } from './slip-parser.js';
 import { suggestCategory, learnHabit, getHabitData } from './habit-engine.js';
+import { getSubscriptions, saveSubscription, deleteSubscription, paySubscription, getUpcomingBills } from './subscriptions.js';
 import { exportTransactions }            from './export.js';
 import { initDashboard }                 from './pages/dashboard.js';
 import { initTransactions }              from './pages/transactions.js';
@@ -598,7 +599,9 @@ let currentThumbUrl = null;
 let isProcessingSlip = false;
 let isSplitMode = false;
 let splitItems = [];
-let allExpenseCategories = [];
+let allLoadedCategories = [];
+let allLoadedAccounts = [];
+let currentSlipType = 'expense';
 
 function revokeCurrentThumb() {
   if (currentThumbUrl) {
@@ -606,6 +609,59 @@ function revokeCurrentThumb() {
     currentThumbUrl = null;
   }
 }
+
+function setSlipType(type) {
+  currentSlipType = type || 'expense';
+  document.querySelectorAll('#slip-type-tabs .type-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === currentSlipType);
+  });
+
+  const isTransfer = currentSlipType === 'transfer';
+  const isIncome   = currentSlipType === 'income';
+
+  const amountInp      = document.getElementById('slip-amount');
+  const grpAcc         = document.getElementById('grp-slip-account');
+  const grpXfer        = document.getElementById('grp-slip-transfer');
+  const lblAcc         = document.getElementById('lbl-slip-account');
+  const grpSplitToggle = document.getElementById('grp-slip-split-toggle');
+  const grpCat         = document.getElementById('grp-slip-category');
+  const grpAdv         = document.getElementById('grp-slip-advance');
+
+  if (amountInp) {
+    amountInp.style.color = isIncome ? 'var(--income)' : (isTransfer ? 'var(--primary)' : 'var(--expense)');
+  }
+
+  if (grpAcc) grpAcc.classList.toggle('hidden', isTransfer);
+  if (grpXfer) grpXfer.classList.toggle('hidden', !isTransfer);
+  if (lblAcc) lblAcc.textContent = isIncome ? 'บัญชีที่รับเงิน' : 'บัญชีที่จ่าย';
+
+  if (grpSplitToggle) grpSplitToggle.classList.toggle('hidden', isTransfer);
+  if (grpCat) grpCat.classList.toggle('hidden', isTransfer);
+  if (grpAdv) grpAdv.classList.toggle('hidden', currentSlipType !== 'expense');
+
+  if (isTransfer) {
+    setSplitMode(false);
+  } else {
+    const filtered = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
+    const catSelect = document.getElementById('slip-category');
+    if (catSelect && filtered.length) {
+      const prevVal = catSelect.value;
+      catSelect.innerHTML = filtered
+        .map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`)
+        .join('');
+      if (filtered.some(c => c.id === prevVal)) catSelect.value = prevVal;
+    }
+    if (isSplitMode) {
+      renderSplitItems();
+    }
+  }
+}
+
+// Slip type tab clicks
+document.getElementById('slip-type-tabs')?.addEventListener('click', (e) => {
+  const tab = e.target.closest('.type-tab');
+  if (tab) setSlipType(tab.dataset.type);
+});
 
 function setSplitMode(enabled) {
   isSplitMode = enabled;
@@ -620,7 +676,8 @@ function setSplitMode(enabled) {
   if (enabled) {
     if (!splitItems.length) {
       const fullAmtMinor = parseAmount(document.getElementById('slip-amount')?.value) || currentParsedData?.amountMinor || 0;
-      const catId = document.getElementById('slip-category')?.value || (allExpenseCategories[0]?.id || 'cat_food');
+      const filteredCats = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
+      const catId = document.getElementById('slip-category')?.value || (filteredCats[0]?.id || 'cat_food');
       const note = document.getElementById('slip-note')?.value || currentParsedData?.memo || '';
       splitItems = [{
         id: Math.random().toString(36).slice(2, 8),
@@ -669,7 +726,8 @@ function renderSplitItems() {
 
   if (!container) return;
 
-  const catOpts = (selectedCatId) => allExpenseCategories
+  const filteredCats = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
+  const catOpts = (selectedCatId) => filteredCats
     .map(c => `<option value="${c.id}" ${c.id === selectedCatId ? 'selected' : ''}>${c.icon || ''} ${c.name}</option>`)
     .join('');
 
@@ -684,10 +742,12 @@ function renderSplitItems() {
       </div>
       <div class="split-row-bottom">
         <input type="text" class="split-item-note" data-id="${item.id}" value="${item.note || ''}" placeholder="โน้ตย่อย (เช่น ชาบูนาย A, ขนม)" style="flex:1;font-size:12px" />
-        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
-          <input type="checkbox" class="split-item-advance-check" data-id="${item.id}" ${item.isAdvance ? 'checked' : ''} />
-          <span>ฝากจ่าย</span>
-        </label>
+        ${currentSlipType === 'expense' ? `
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" class="split-item-advance-check" data-id="${item.id}" ${item.isAdvance ? 'checked' : ''} />
+            <span>ฝากจ่าย</span>
+          </label>
+        ` : ''}
       </div>
       <div class="split-advance-box ${item.isAdvance ? '' : 'hidden'}" id="adv-box-${item.id}">
         <input type="text" class="split-item-advance-to" data-id="${item.id}" value="${item.advanceTo || ''}" placeholder="ระบุชื่อเพื่อน (เช่น บอย)" style="font-size:12px;padding:4px 8px;width:100%" />
@@ -786,9 +846,10 @@ document.getElementById('btn-add-split-item')?.addEventListener('click', () => {
   const fullSlipAmountMinor = parseAmount(document.getElementById('slip-amount')?.value) || 0;
   const allocatedMinor = splitItems.reduce((sum, item) => sum + (item.amountMinor || 0), 0);
   const remainingMinor = Math.max(0, fullSlipAmountMinor - allocatedMinor);
+  const filteredCats = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
   splitItems.push({
     id: Math.random().toString(36).slice(2, 8),
-    categoryId: allExpenseCategories[0]?.id || 'cat_food',
+    categoryId: filteredCats[0]?.id || 'cat_food',
     amountMinor: remainingMinor,
     note: '',
     isAdvance: false,
@@ -937,10 +998,11 @@ async function processCurrentSlip() {
 async function populateSlipPreview(parsed) {
   const [accounts, categories] = await Promise.all([
     store.getAccounts(),
-    store.getCategories('expense'),
+    store.getCategories(),
   ]);
 
-  allExpenseCategories = categories;
+  allLoadedAccounts = accounts;
+  allLoadedCategories = categories;
   setSplitMode(false);
   splitItems = [];
 
@@ -951,27 +1013,39 @@ async function populateSlipPreview(parsed) {
   if (slipAdvBox) slipAdvBox.classList.add('hidden');
   if (slipAdvInput) slipAdvInput.value = '';
 
-  const accSelect = document.getElementById('slip-account');
-  const catSelect = document.getElementById('slip-category');
+  const accSelect  = document.getElementById('slip-account');
+  const fromSelect = document.getElementById('slip-from-account');
+  const toSelect   = document.getElementById('slip-to-account');
 
-  if (accSelect) {
-    accSelect.innerHTML = accounts
-      .map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`)
-      .join('');
-    const habitData = getHabitData();
-    const matchedAccId = matchBankToAccount(parsed.bank, accounts, habitData);
-    if (matchedAccId) accSelect.value = matchedAccId;
+  const accOptions = accounts.map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`).join('');
+
+  if (accSelect)  accSelect.innerHTML  = accOptions;
+  if (fromSelect) fromSelect.innerHTML = accOptions;
+  if (toSelect) {
+    toSelect.innerHTML = accOptions;
+    if (accounts.length > 1) toSelect.value = accounts[1].id;
   }
 
-  if (catSelect) {
-    catSelect.innerHTML = categories
-      .map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`)
-      .join('');
+  const habitData = getHabitData();
+  const matchedAccId = matchBankToAccount(parsed.bank, accounts, habitData);
+  if (matchedAccId) {
+    if (accSelect)  accSelect.value  = matchedAccId;
+    if (fromSelect) fromSelect.value = matchedAccId;
+  }
+
+  // Set detected or default type
+  const initialType = parsed.type === 'income' ? 'income' : 'expense';
+  setSlipType(initialType);
+
+  // Suggest category for current type
+  const filteredCats = categories.filter(c => c.type === initialType || c.type === 'both');
+  const catSelect = document.getElementById('slip-category');
+  if (catSelect && filteredCats.length) {
     const suggestedCatId = suggestCategory({
       memo: parsed.memo,
       bankCategoryTag: parsed.bankCategoryTag,
       payeeKey: parsed.payeeAccount,
-      categories,
+      categories: filteredCats,
     });
     if (suggestedCatId) catSelect.value = suggestedCatId;
   }
@@ -1000,7 +1074,6 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
 
   const fullAmountMinor = parseAmount(document.getElementById('slip-amount').value);
   const date            = document.getElementById('slip-date').value;
-  const accountId       = document.getElementById('slip-account').value;
 
   if (!fullAmountMinor || fullAmountMinor <= 0) {
     showToast('กรุณาระบุจำนวนเงิน', 'error');
@@ -1009,7 +1082,37 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
     return;
   }
 
-  if (isSplitMode) {
+  if (currentSlipType === 'transfer') {
+    const fromId = document.getElementById('slip-from-account').value;
+    const toId   = document.getElementById('slip-to-account').value;
+    const note   = document.getElementById('slip-note').value.trim();
+
+    if (!fromId || !toId) {
+      showToast('กรุณาเลือกบัญชีต้นทางและปลายทาง', 'error');
+      if (saveBtn) saveBtn.disabled = false;
+      if (skipBtn) skipBtn.disabled = false;
+      return;
+    }
+    if (fromId === toId) {
+      showToast('ไม่สามารถโอนเงินเข้าบัญชีเดียวกันได้', 'error');
+      if (saveBtn) saveBtn.disabled = false;
+      if (skipBtn) skipBtn.disabled = false;
+      return;
+    }
+
+    const tx = makeTransaction({
+      type: 'transfer',
+      amountMinor: fullAmountMinor,
+      date,
+      fromAccountId: fromId,
+      toAccountId: toId,
+      note,
+    });
+    await store.put('transactions', tx);
+    await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+    syncTransaction(tx).catch(console.error);
+
+  } else if (isSplitMode) {
     const allocatedMinor = splitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
     if (allocatedMinor !== fullAmountMinor) {
       showToast('กรุณาจัดสรรยอดให้ลงตัวพอดี 0.00 ฿ ก่อนบันทึก', 'error');
@@ -1018,38 +1121,41 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
       return;
     }
 
+    const accountId = document.getElementById('slip-account').value;
     const splitGroupId = genId('split');
     for (const item of splitItems) {
       if (!item.amountMinor || item.amountMinor <= 0) continue;
+      const isAdv = currentSlipType === 'expense' && Boolean(item.isAdvance);
       const tx = makeTransaction({
-        type: 'expense',
+        type: currentSlipType,
         amountMinor: item.amountMinor,
         date,
         accountId,
-        categoryId: item.isAdvance ? 'cat_advance' : item.categoryId,
+        categoryId: isAdv ? 'cat_advance' : item.categoryId,
         note: item.note,
         splitGroupId,
-        isAdvance: item.isAdvance,
-        advanceTo: item.advanceTo,
-        advanceStatus: item.isAdvance ? 'pending' : null,
+        isAdvance: isAdv,
+        advanceTo: isAdv ? (item.advanceTo || 'เพื่อน') : '',
+        advanceStatus: isAdv ? 'pending' : null,
       });
 
       await store.put('transactions', tx);
       await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
       syncTransaction(tx).catch(console.error);
 
-      if (!item.isAdvance && item.categoryId && item.note) {
+      if (!isAdv && item.categoryId && item.note) {
         learnHabit({ memo: item.note, categoryId: item.categoryId });
       }
     }
   } else {
+    const accountId   = document.getElementById('slip-account').value;
     const categoryId  = document.getElementById('slip-category').value;
     const note        = document.getElementById('slip-note').value.trim();
-    const isAdv       = document.getElementById('slip-is-advance')?.checked;
+    const isAdv       = currentSlipType === 'expense' && document.getElementById('slip-is-advance')?.checked;
     const advTo       = document.getElementById('slip-advance-to')?.value.trim();
 
     const tx = makeTransaction({
-      type: 'expense',
+      type: currentSlipType,
       amountMinor: fullAmountMinor,
       date,
       accountId,
@@ -1065,7 +1171,7 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
     syncTransaction(tx).catch(console.error);
 
     // Train habit engine on confirmed categorization and dynamic bank-to-account mapping
-    if (!isAdv) {
+    if (!isAdv && categoryId) {
       learnHabit({
         memo: note,
         payeeKey: currentParsedData?.payeeAccount,
@@ -1415,6 +1521,107 @@ document.getElementById('budget-form')?.addEventListener('submit', async (e) => 
   showToast(editId ? 'แก้ไขงบประมาณแล้ว' : 'ตั้งงบประมาณแล้ว');
   refreshPage();
 });
+
+
+// ── Subscription modal ────────────────────────────────────────
+
+window.openSubscriptionModal = async function(subId = null) {
+  const titleEl   = document.getElementById('subscription-modal-title');
+  const idInput   = document.getElementById('sub-id');
+  const deleteBtn = document.getElementById('btn-delete-sub');
+
+  const [accounts, categories] = await Promise.all([
+    store.getAccounts(),
+    store.getCategories('expense'),
+  ]);
+
+  document.getElementById('sub-account').innerHTML =
+    accounts.map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`).join('');
+
+  document.getElementById('sub-category').innerHTML =
+    categories.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
+
+  if (subId) {
+    const all = getSubscriptions();
+    const sub = all.find(s => s.id === subId);
+    if (!sub) return;
+    titleEl.textContent = 'แก้ไขรายจ่ายประจำ';
+    idInput.value = sub.id;
+    document.getElementById('sub-name').value = sub.name || '';
+    document.getElementById('sub-amount').value = (sub.amountMinor / 100).toFixed(2);
+    document.getElementById('sub-due-day').value = sub.dueDay || 1;
+    document.getElementById('sub-account').value = sub.accountId;
+    document.getElementById('sub-category').value = sub.categoryId;
+    document.getElementById('sub-note').value = sub.note || '';
+    setIconPicker('sub-icon-picker', sub.icon || '🎬');
+    deleteBtn.classList.remove('hidden');
+  } else {
+    titleEl.textContent = 'เพิ่มรายจ่ายประจำ';
+    idInput.value = '';
+    document.getElementById('sub-name').value = '';
+    document.getElementById('sub-amount').value = '';
+    document.getElementById('sub-due-day').value = new Date().getDate();
+    document.getElementById('sub-note').value = '';
+    setIconPicker('sub-icon-picker', '🎬');
+    deleteBtn.classList.add('hidden');
+  }
+
+  openModal('subscription-modal');
+};
+
+document.getElementById('subscription-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const editId = document.getElementById('sub-id').value;
+  const name = document.getElementById('sub-name').value.trim();
+  const amountMinor = parseAmount(document.getElementById('sub-amount').value);
+  const dueDay = parseInt(document.getElementById('sub-due-day').value, 10) || 1;
+  const accountId = document.getElementById('sub-account').value;
+  const categoryId = document.getElementById('sub-category').value;
+  const note = document.getElementById('sub-note').value.trim();
+  const icon = getSelectedIcon('sub-icon-picker');
+
+  if (!name) {
+    showToast('กรุณาระบุชื่อรายการ', 'error');
+    return;
+  }
+  if (!amountMinor || amountMinor <= 0) {
+    showToast('กรุณาระบุจำนวนเงิน', 'error');
+    return;
+  }
+
+  saveSubscription({
+    id: editId || undefined,
+    name,
+    amountMinor,
+    dueDay,
+    accountId,
+    categoryId,
+    note,
+    icon,
+    cycle: 'monthly',
+  });
+
+  closeModal('subscription-modal');
+  showToast(editId ? 'แก้ไขรายจ่ายประจำแล้ว' : 'เพิ่มรายจ่ายประจำแล้ว ✓');
+  refreshPage();
+});
+
+document.getElementById('btn-delete-sub')?.addEventListener('click', async () => {
+  const editId = document.getElementById('sub-id').value;
+  if (!editId) return;
+  const ok = await showConfirm('ลบรายการ', 'ต้องการลบรายจ่ายประจำนี้หรือไม่?');
+  if (!ok) return;
+
+  deleteSubscription(editId);
+  closeModal('subscription-modal');
+  showToast('ลบรายการแล้ว');
+  refreshPage();
+});
+
+window.paySubscription = async (subId) => {
+  await paySubscription(subId, store);
+  refreshPage();
+};
 
 
 // ── Settings page ─────────────────────────────────────────────

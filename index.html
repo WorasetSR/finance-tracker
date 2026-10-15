@@ -485,6 +485,77 @@
   </div>
 </div>
 
+<!-- ── MODAL: ADD / EDIT SUBSCRIPTION / RECURRING BILL ──── -->
+<div id="subscription-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="subscription-modal-title">เพิ่มรายจ่ายประจำ / Subscription</h2>
+      <button class="modal-close" data-close="subscription-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="subscription-form" autocomplete="off">
+        <input type="hidden" id="sub-id" />
+        <div class="field">
+          <label for="sub-name">ชื่อบริการ / รายการ</label>
+          <input type="text" id="sub-name" placeholder="เช่น Netflix, Spotify, ค่าเน็ต, ค่าห้อง" required />
+        </div>
+        <div class="field-row" style="display:flex;gap:12px">
+          <div class="field" style="flex:1">
+            <label for="sub-amount">จำนวนเงิน (฿)</label>
+            <input type="number" id="sub-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
+          </div>
+          <div class="field" style="width:110px">
+            <label for="sub-due-day">วันที่ตัดรอบ</label>
+            <input type="number" id="sub-due-day" min="1" max="31" placeholder="1-31" value="1" required />
+          </div>
+        </div>
+        <div class="field-row" style="display:flex;gap:12px">
+          <div class="field" style="flex:1">
+            <label for="sub-account">บัญชีที่ใช้ตัดเงิน</label>
+            <select id="sub-account" required></select>
+          </div>
+          <div class="field" style="flex:1">
+            <label for="sub-category">หมวดหมู่</label>
+            <select id="sub-category" required></select>
+          </div>
+        </div>
+        <div class="field">
+          <label>ไอคอน</label>
+          <div class="icon-picker" id="sub-icon-picker">
+            <span class="icon-opt selected" data-icon="🎬">🎬</span>
+            <span class="icon-opt" data-icon="🎵">🎵</span>
+            <span class="icon-opt" data-icon="📱">📱</span>
+            <span class="icon-opt" data-icon="🌐">🌐</span>
+            <span class="icon-opt" data-icon="🏠">🏠</span>
+            <span class="icon-opt" data-icon="⚡">⚡</span>
+            <span class="icon-opt" data-icon="💧">💧</span>
+            <span class="icon-opt" data-icon="🛡️">🛡️</span>
+            <span class="icon-opt" data-icon="🏋️">🏋️</span>
+            <span class="icon-opt" data-icon="☁️">☁️</span>
+            <span class="icon-opt" data-icon="📦">📦</span>
+            <span class="icon-opt" data-icon="💳">💳</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="sub-note">โน้ตเพิ่มเติม</label>
+          <input type="text" id="sub-note" placeholder="เช่น แฟมิลี่แชร์กับเพื่อน, บัญชีเมล..." />
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-sub" class="btn-danger hidden">ลบรายการ</button>
+          <div class="modal-actions-right">
+            <button type="button" class="btn-ghost" data-close="subscription-modal">ยกเลิก</button>
+            <button type="submit" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL: BATCH SLIP INGESTION ────────────────────── -->
 <div id="slip-modal" class="modal-overlay hidden">
   <div class="modal modal-lg">
@@ -530,6 +601,13 @@
             <img id="slip-thumb-img" alt="สลิปโอนเงิน" class="slip-thumb" />
           </div>
           <form id="slip-confirm-form" class="slip-form">
+            <!-- Type Tabs -->
+            <div class="type-tabs" id="slip-type-tabs" style="margin-bottom:12px">
+              <button type="button" class="type-tab active" data-type="expense">รายจ่าย</button>
+              <button type="button" class="type-tab" data-type="income">รายรับ</button>
+              <button type="button" class="type-tab" data-type="transfer">โอนข้ามบัญชี</button>
+            </div>
+
             <div class="field">
               <label>จำนวนเงิน (บาท)</label>
               <input type="text" id="slip-amount" class="mono" style="font-size:20px;font-weight:700;color:var(--expense)" required />
@@ -539,13 +617,26 @@
                 <label>วันที่</label>
                 <input type="date" id="slip-date" required />
               </div>
-              <div class="field" style="flex:1">
-                <label>บัญชีต้นทาง</label>
-                <select id="slip-account" required></select>
+              <div class="field" id="grp-slip-account" style="flex:1">
+                <label id="lbl-slip-account">บัญชีที่จ่าย</label>
+                <select id="slip-account"></select>
               </div>
             </div>
+
+            <!-- Transfer: From & To Account (Hidden unless transfer) -->
+            <div class="field-row hidden" id="grp-slip-transfer" style="display:flex;gap:12px;margin-top:4px">
+              <div class="field" style="flex:1">
+                <label>จากบัญชี</label>
+                <select id="slip-from-account"></select>
+              </div>
+              <div class="field" style="flex:1">
+                <label>ไปบัญชี</label>
+                <select id="slip-to-account"></select>
+              </div>
+            </div>
+
             <!-- Split Mode Toggle -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px">
+            <div id="grp-slip-split-toggle" style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px">
               <span style="font-size:12px;color:var(--text-muted)">แบ่งหลายหมวด / มีคนฝากจ่าย?</span>
               <button type="button" class="btn-ghost btn-sm" id="btn-toggle-split" style="font-size:12px;padding:4px 10px;border:1px solid var(--border)">
                 ➗ แยกหลายรายการ
@@ -554,15 +645,15 @@
 
             <!-- Single Item Section (Default) -->
             <div id="slip-single-section">
-              <div class="field">
-                <label>หมวดหมู่ (จัดให้อัตโนมัติจาก Habit Engine)</label>
+              <div class="field" id="grp-slip-category">
+                <label id="lbl-slip-category">หมวดหมู่ (จัดให้อัตโนมัติจาก Habit Engine)</label>
                 <select id="slip-category"></select>
               </div>
               <div class="field">
                 <label>บันทึกช่วยจำ (Memo จากสลิป)</label>
                 <input type="text" id="slip-note" placeholder="โน้ตช่วยจำ" />
               </div>
-              <div class="field" style="margin-top:6px">
+              <div class="field" id="grp-slip-advance" style="margin-top:6px">
                 <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
                   <input type="checkbox" id="slip-is-advance" />
                   <span style="font-size:13px;font-weight:600">ออกให้คนอื่นก่อนทั้งบิล (รอเก็บเงินคืน)</span>

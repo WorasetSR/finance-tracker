@@ -179,7 +179,8 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
   "bank": string of the sender bank, financial institution, or app name seen on the slip (e.g. "MAKE by KBank", "KBank", "SCB", "Krungthai", "Dime", "TrueMoney", "LHBANK", etc.),
   "memo": string containing ONLY the transfer note / memo / "บันทึกช่วยจำ" that the sender typed. If there is no memo note, return "". IMPORTANT: DO NOT include the receiver's person name or merchant name here.
   "bankCategoryTag": string of any built-in category tag printed on the slip by the bank (e.g. K PLUS "อาหารและเครื่องดื่ม", "ช้อปปิ้ง", "บิล"). If none, return "".
-  "payeeAccount": string of the masked receiver account number or promptpay (e.g. "xxx-1234"). If none, return ""
+  "payeeAccount": string of the masked receiver account number or promptpay (e.g. "xxx-1234"). If none, return "",
+  "type": string "expense" or "income" (default "expense". If the slip clearly indicates incoming transfer / money received / "เงินเข้า" / "รับเงินโอน", set to "income")
 }`;
 
   const payload = {
@@ -316,6 +317,7 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
     memo:            parsed.memo            || '',
     bankCategoryTag: parsed.bankCategoryTag || '',
     payeeAccount:    parsed.payeeAccount    || '',
+    type:            parsed.type === 'income' ? 'income' : 'expense',
   };
 }
 
