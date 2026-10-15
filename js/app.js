@@ -4,10 +4,12 @@
 // ─────────────────────────────────────────────────────────────
 
 import { LocalStore }                    from './local-store.js';
-import { getConfig, saveConfig, isConfigured, getSyncState, getLastSync } from './settings.js';
+import { getConfig, saveConfig, isConfigured, getSyncState, getLastSync, getGeminiKey, saveGeminiKey } from './settings.js';
 import { GitHubSync }                    from './sync.js';
 import { makeTransaction, makeAccount, makeCategory, makeBudget, todayStr, currentMonth } from './schema.js';
 import { parseAmount, formatTHB, formatMonth } from './format.js';
+import { parseSlipImage, matchBankToAccount } from './slip-parser.js';
+import { suggestCategory, learnHabit }   from './habit-engine.js';
 import { exportTransactions }            from './export.js';
 import { initDashboard }                 from './pages/dashboard.js';
 import { initTransactions }              from './pages/transactions.js';
@@ -246,6 +248,14 @@ document.getElementById('main-app')?.addEventListener('click', (e) => {
     openTxModal();
   }
 
+  // Slip scan buttons
+  if (e.target.closest('#btn-slip-fab') || e.target.closest('#topbar-btn-slip')) {
+    openSlipModal();
+  }
+  if (e.target.closest('#btn-tx-modal-scan-slip')) {
+    closeModal('tx-modal');
+    openSlipModal();
+  }
 });
 
 // ── Sync ──────────────────────────────────────────────────────
@@ -448,6 +458,10 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
     await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
   }
 
+  if (type === 'expense' && txData.categoryId && note) {
+    learnHabit({ memo: note, categoryId: txData.categoryId });
+  }
+
   closeModal('tx-modal');
   showToast(editId ? 'แก้ไขรายการแล้ว' : 'เพิ่มรายการแล้ว');
   updateSyncWidget('pending');
@@ -469,6 +483,231 @@ document.getElementById('btn-delete-tx')?.addEventListener('click', async () => 
   updateSyncWidget('pending');
   refreshPage();
 });
+
+// ── Slip modal (Batch Scan & Habit Matching) ──────────────────
+
+let slipQueue = [];
+let currentSlipIndex = 0;
+let currentParsedData = null;
+
+async function openSlipModal() {
+  slipQueue = [];
+  currentSlipIndex = 0;
+  currentParsedData = null;
+
+  document.getElementById('slip-drop-section')?.classList.remove('hidden');
+  document.getElementById('slip-loading-section')?.classList.add('hidden');
+  document.getElementById('slip-preview-section')?.classList.add('hidden');
+  document.getElementById('slip-queue-badge')?.classList.add('hidden');
+
+  const fileInput = document.getElementById('slip-file-input');
+  if (fileInput) fileInput.value = '';
+
+  openModal('slip-modal');
+}
+window.openSlipModal = openSlipModal;
+
+async function handleSlipFiles(files) {
+  if (!files || !files.length) return;
+
+  const apiKey = getGeminiKey();
+  if (!apiKey) {
+    showToast('กรุณาระบุ Gemini API Key ในหน้าตั้งค่าก่อนสแกนสลิป', 'error');
+    closeModal('slip-modal');
+    navigate('settings');
+    return;
+  }
+
+  slipQueue = Array.from(files);
+  currentSlipIndex = 0;
+  await processCurrentSlip();
+}
+
+async function processCurrentSlip() {
+  if (currentSlipIndex >= slipQueue.length) {
+    closeModal('slip-modal');
+    showToast(`สแกนและบันทึกสลิปเรียบร้อย (${slipQueue.length} ใบ) 🎉`);
+    refreshPage();
+    return;
+  }
+
+  const dropSec = document.getElementById('slip-drop-section');
+  const loadSec = document.getElementById('slip-loading-section');
+  const prevSec = document.getElementById('slip-preview-section');
+  const badge   = document.getElementById('slip-queue-badge');
+  const loadTxt = document.getElementById('slip-loading-text');
+
+  dropSec?.classList.add('hidden');
+  prevSec?.classList.add('hidden');
+  loadSec?.classList.remove('hidden');
+
+  if (badge) {
+    badge.textContent = `สลิป ${currentSlipIndex + 1}/${slipQueue.length}`;
+    badge.classList.remove('hidden');
+  }
+  if (loadTxt) {
+    loadTxt.textContent = `กำลังวิเคราะห์สลิปใบที่ ${currentSlipIndex + 1} จาก ${slipQueue.length}...`;
+  }
+
+  const file = slipQueue[currentSlipIndex];
+  const thumbImg = document.getElementById('slip-thumb-img');
+  if (thumbImg) {
+    thumbImg.src = URL.createObjectURL(file);
+  }
+
+  try {
+    const apiKey = getGeminiKey();
+    const parsed = await parseSlipImage(file, apiKey);
+    currentParsedData = parsed;
+    await populateSlipPreview(parsed);
+  } catch (err) {
+    console.error('Slip parse error:', err);
+    showToast(`สลิปใบที่ ${currentSlipIndex + 1}: ${err.message}`, 'error');
+    currentParsedData = {
+      amountMinor: 0,
+      date: todayStr(),
+      time: '',
+      bank: '',
+      memo: '',
+      bankCategoryTag: '',
+      payeeAccount: '',
+    };
+    await populateSlipPreview(currentParsedData);
+  }
+}
+
+async function populateSlipPreview(parsed) {
+  const [accounts, categories] = await Promise.all([
+    store.getAccounts(),
+    store.getCategories('expense'),
+  ]);
+
+  const accSelect = document.getElementById('slip-account');
+  const catSelect = document.getElementById('slip-category');
+
+  if (accSelect) {
+    accSelect.innerHTML = accounts
+      .map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`)
+      .join('');
+    const matchedAccId = matchBankToAccount(parsed.bank, accounts);
+    if (matchedAccId) accSelect.value = matchedAccId;
+  }
+
+  if (catSelect) {
+    catSelect.innerHTML = categories
+      .map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`)
+      .join('');
+    const suggestedCatId = suggestCategory({
+      memo: parsed.memo,
+      bankCategoryTag: parsed.bankCategoryTag,
+      payeeKey: parsed.payeeAccount,
+      categories,
+    });
+    if (suggestedCatId) catSelect.value = suggestedCatId;
+  }
+
+  const amountInput = document.getElementById('slip-amount');
+  const dateInput   = document.getElementById('slip-date');
+  const noteInput   = document.getElementById('slip-note');
+
+  if (amountInput) amountInput.value = (parsed.amountMinor / 100).toFixed(2);
+  if (dateInput)   dateInput.value   = parsed.date || todayStr();
+  if (noteInput)   noteInput.value   = parsed.memo || '';
+
+  document.getElementById('slip-loading-section')?.classList.add('hidden');
+  document.getElementById('slip-preview-section')?.classList.remove('hidden');
+}
+
+// Slip Form Submit (Confirm and Save)
+document.getElementById('slip-confirm-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const amountMinor = parseAmount(document.getElementById('slip-amount').value);
+  const date        = document.getElementById('slip-date').value;
+  const accountId   = document.getElementById('slip-account').value;
+  const categoryId  = document.getElementById('slip-category').value;
+  const note        = document.getElementById('slip-note').value.trim();
+
+  if (!amountMinor || amountMinor <= 0) {
+    showToast('กรุณาระบุจำนวนเงิน', 'error');
+    return;
+  }
+
+  const tx = makeTransaction({
+    type: 'expense',
+    amountMinor,
+    date,
+    accountId,
+    categoryId,
+    note,
+  });
+
+  await store.put('transactions', tx);
+  await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+
+  // Train habit engine on confirmed categorization
+  learnHabit({
+    memo: note,
+    payeeKey: currentParsedData?.payeeAccount,
+    categoryId,
+  });
+
+  updateSyncWidget('pending');
+  showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว ✓`);
+
+  currentSlipIndex++;
+  await processCurrentSlip();
+});
+
+// Skip button
+document.getElementById('btn-slip-skip')?.addEventListener('click', async () => {
+  showToast(`ข้ามสลิปใบที่ ${currentSlipIndex + 1}`);
+  currentSlipIndex++;
+  await processCurrentSlip();
+});
+
+// File upload triggers & Drag-and-Drop
+document.getElementById('btn-browse-slips')?.addEventListener('click', () => {
+  document.getElementById('slip-file-input')?.click();
+});
+
+document.getElementById('slip-file-input')?.addEventListener('change', (e) => {
+  if (e.target.files && e.target.files.length) {
+    handleSlipFiles(e.target.files);
+  }
+});
+
+const slipDropzone = document.getElementById('slip-dropzone');
+if (slipDropzone) {
+  slipDropzone.addEventListener('click', (e) => {
+    if (e.target.id !== 'btn-browse-slips') {
+      document.getElementById('slip-file-input')?.click();
+    }
+  });
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    slipDropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      slipDropzone.classList.add('dragover');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    slipDropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      slipDropzone.classList.remove('dragover');
+    });
+  });
+
+  slipDropzone.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) {
+      handleSlipFiles(dt.files);
+    }
+  });
+}
 
 // ── Account modal ─────────────────────────────────────────────
 
@@ -769,6 +1008,29 @@ async function initSettings(container) {
         </form>
       </div>
       <div class="card" style="max-width:480px;margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h3 class="card-title" style="margin:0">AI สแกนสลิป (Gemini Vision)</h3>
+          <span class="badge ${getGeminiKey() ? 'badge-income' : 'badge-neutral'}">
+            ${getGeminiKey() ? 'พร้อมใช้งาน' : 'ยังไม่ได้ตั้งค่า'}
+          </span>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
+          สกัดยอดเงิน วันที่ และบันทึกช่วยจำจากสลิปโอนเงิน (ฟรี 1,500 ครั้ง/วัน ผ่าน Google AI Studio)
+        </p>
+        <form id="gemini-key-form" autocomplete="off" style="margin-top:10px">
+          <div class="field">
+            <label>Gemini API Key</label>
+            <input type="password" id="s-gemini-key" value="${getGeminiKey()}" placeholder="AIzaSy..." />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <button type="submit" class="btn-primary">บันทึก Key</button>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="btn-ghost" style="font-size:12px;text-decoration:none">
+              รับ API Key ฟรี ↗
+            </a>
+          </div>
+        </form>
+      </div>
+      <div class="card" style="max-width:480px;margin-top:16px">
         <h3 class="card-title">ธีม & ลักษณะ</h3>
         <div class="toggle-row">
           <span class="toggle-label">Dark Mode</span>
@@ -820,6 +1082,14 @@ async function initSettings(container) {
       token:  document.getElementById('s-token').value.trim(),
     });
     showToast('บันทึกการตั้งค่าแล้ว');
+  });
+
+  document.getElementById('gemini-key-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const val = document.getElementById('s-gemini-key').value.trim();
+    saveGeminiKey(val);
+    showToast(val ? 'บันทึก Gemini API Key แล้ว' : 'ลบ Gemini API Key แล้ว');
+    initSettings(container);
   });
 
   document.getElementById('s-dark-mode').addEventListener('change', (e) => {

@@ -413,11 +413,35 @@ img  { display: block; max-width: 100%; }
   -webkit-tap-highlight-color: transparent;
 }
 
+.fab-group {
+  display: none;
+  position: fixed;
+  bottom: 76px;
+  right: 16px;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 99;
+}
+
+.fab-group .fab-float {
+  position: static;
+  display: flex;
+}
+
+.fab-slip {
+  background: var(--bg-card);
+  color: var(--primary);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.fab-slip:hover { background: var(--primary-50); }
+
 .fab-float:hover  { background: var(--primary-light); }
 .fab-float:active { transform: scale(0.92); }
 
 @media (max-width: 768px) {
   .fab-float { display: flex; }
+  .fab-group { display: flex; }
 }
 
 /* ── RESPONSIVE: MOBILE ──────────────────────────────────── */
@@ -1158,6 +1182,7 @@ img  { display: block; max-width: 100%; }
   to   { transform: scale(1);    opacity: 1; }
 }
 
+.modal-lg { max-width: 680px; }
 .modal-sm { max-width: 400px; }
 .modal-xs { max-width: 340px; }
 
@@ -2215,3 +2240,82 @@ img  { display: block; max-width: 100%; }
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 .btn-archive:hover { background: var(--border-light); color: var(--text); border-color: var(--text-muted); }
+
+/* ── SLIP SCAN MODAL & DROPZONE ──────────────────────────── */
+.spinner {
+  width: 38px;
+  height: 38px;
+  border: 3px solid var(--border-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.slip-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 36px 20px;
+  text-align: center;
+  background: var(--bg-input);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.slip-dropzone:hover,
+.slip-dropzone.dragover {
+  border-color: var(--primary);
+  background: var(--primary-50);
+}
+
+.slip-drop-icon {
+  margin-bottom: 12px;
+}
+
+.slip-drop-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.slip-drop-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.slip-preview-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .slip-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.slip-thumb-container {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 380px;
+}
+
+.slip-thumb {
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+  object-fit: contain;
+  display: block;
+}
+
+.slip-form .field {
+  margin-bottom: 12px;
+}
+

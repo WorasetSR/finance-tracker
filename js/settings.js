@@ -11,7 +11,22 @@ const KEYS = Object.freeze({
   token:     'ft_gh_token',
   lastSync:  'ft_last_sync',
   syncState: 'ft_sync_state',
+  geminiKey: 'ft_gemini_key',
 });
+
+// ── Gemini AI config ─────────────────────────────────────────
+
+export function getGeminiKey() {
+  return localStorage.getItem(KEYS.geminiKey) || '';
+}
+
+export function saveGeminiKey(key) {
+  if (key) {
+    localStorage.setItem(KEYS.geminiKey, key.trim());
+  } else {
+    localStorage.removeItem(KEYS.geminiKey);
+  }
+}
 
 // ── GitHub config ────────────────────────────────────────────
 

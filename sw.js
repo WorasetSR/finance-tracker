@@ -1,4 +1,4 @@
-const CACHE = 'ft-v2.1';
+const CACHE = 'ft-v2.2';
 
 const SHELL = [
   './',
@@ -13,6 +13,8 @@ const SHELL = [
   './js/sync.js',
   './js/format.js',
   './js/export.js',
+  './js/habit-engine.js',
+  './js/slip-parser.js',
   './js/pages/dashboard.js',
   './js/pages/transactions.js',
   './js/pages/budget.js',

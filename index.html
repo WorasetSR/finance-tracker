@@ -155,6 +155,12 @@
           <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
         </svg>
       </button>
+      <button class="topbar-settings-btn" id="topbar-btn-slip" aria-label="สแกนสลิป" title="สแกนสลิป">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </button>
       <button class="topbar-settings-btn" id="topbar-btn-settings" aria-label="ตั้งค่า">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
@@ -210,13 +216,21 @@
     </a>
   </nav>
 
-  <!-- Floating add button (mobile) -->
-  <button class="fab-float" id="btn-add-tx-fab" aria-label="เพิ่มรายการ">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-      <line x1="12" y1="5" x2="12" y2="19"/>
-      <line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  </button>
+  <!-- Floating buttons (mobile) -->
+  <div class="fab-group">
+    <button class="fab-float fab-slip" id="btn-slip-fab" aria-label="สแกนสลิป" title="สแกนสลิป">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    </button>
+    <button class="fab-float" id="btn-add-tx-fab" aria-label="เพิ่มรายการ" title="เพิ่มรายการ">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+  </div>
 
 </div>
 
@@ -232,6 +246,13 @@
       </button>
     </div>
     <div class="modal-body">
+      <button type="button" class="btn-ghost btn-full" id="btn-tx-modal-scan-slip" style="margin-bottom:14px;border:1px dashed var(--border);color:var(--primary);display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <span>สแกนสลิปโอนเงิน (เลือกหลายรูปได้)</span>
+      </button>
       <!-- Type Tabs -->
       <div class="type-tabs" id="tx-type-tabs">
         <button class="type-tab active" data-type="expense">รายจ่าย</button>
@@ -449,6 +470,84 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: BATCH SLIP INGESTION ────────────────────── -->
+<div id="slip-modal" class="modal-overlay hidden">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 id="slip-modal-title">สแกนสลิปโอนเงิน</h2>
+        <span id="slip-queue-badge" class="badge badge-neutral hidden">สลิป 1/1</span>
+      </div>
+      <button class="modal-close" data-close="slip-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Step 1: Upload / Dropzone -->
+      <div id="slip-drop-section">
+        <div class="slip-dropzone" id="slip-dropzone">
+          <input type="file" id="slip-file-input" accept="image/*" multiple class="hidden" />
+          <div class="slip-drop-icon">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </div>
+          <div class="slip-drop-title">คลิก หรือ ลากสลิปมาวางที่นี่</div>
+          <div class="slip-drop-sub">เลือกได้หลายรูปพร้อมกัน (ระบบจะวิเคราะห์และให้ตรวจทีละใบ)</div>
+          <button type="button" class="btn-primary" id="btn-browse-slips" style="margin-top:14px">เลือกรูปภาพสลิป</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Loading State -->
+      <div id="slip-loading-section" class="hidden" style="text-align:center;padding:40px 16px">
+        <div class="spinner" style="margin:0 auto 16px"></div>
+        <div id="slip-loading-text" style="font-size:16px;font-weight:600">กำลังวิเคราะห์สลิป...</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">สกัดยอดเงิน วันที่ บัญชี และบันทึกช่วยจำด้วย Gemini Vision</div>
+      </div>
+
+      <!-- Step 3: Preview Card -->
+      <div id="slip-preview-section" class="hidden">
+        <div class="slip-preview-grid">
+          <div class="slip-thumb-container">
+            <img id="slip-thumb-img" alt="สลิปโอนเงิน" class="slip-thumb" />
+          </div>
+          <form id="slip-confirm-form" class="slip-form">
+            <div class="field">
+              <label>จำนวนเงิน (บาท)</label>
+              <input type="text" id="slip-amount" class="mono" style="font-size:20px;font-weight:700;color:var(--expense)" required />
+            </div>
+            <div class="field-row" style="display:flex;gap:12px">
+              <div class="field" style="flex:1">
+                <label>วันที่</label>
+                <input type="date" id="slip-date" required />
+              </div>
+              <div class="field" style="flex:1">
+                <label>บัญชีต้นทาง</label>
+                <select id="slip-account" required></select>
+              </div>
+            </div>
+            <div class="field">
+              <label>หมวดหมู่ (จัดให้อัตโนมัติจาก Habit Engine)</label>
+              <select id="slip-category" required></select>
+            </div>
+            <div class="field">
+              <label>บันทึกช่วยจำ (Memo จากสลิป)</label>
+              <input type="text" id="slip-note" placeholder="โน้ตช่วยจำ" />
+            </div>
+            <div class="modal-actions" style="margin-top:18px">
+              <button type="button" class="btn-ghost" id="btn-slip-skip">ข้ามใบนี้</button>
+              <button type="submit" class="btn-primary" id="btn-slip-save">บันทึก & ถัดไป ✓</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   </div>
 </div>
