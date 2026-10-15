@@ -1,4 +1,4 @@
-const CACHE = 'ft-v3.0';
+const CACHE = 'ft-v3.1';
 
 const SHELL = [
   './',

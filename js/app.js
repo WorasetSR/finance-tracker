@@ -320,6 +320,39 @@ async function doSync() {
   }
 }
 
+// Auto-pull from Supabase when window regains focus or tab becomes visible
+let _isPulling = false;
+async function pullLatestIfVisible() {
+  if (_isPulling || !isSupabaseConfigured()) return;
+  _isPulling = true;
+  try {
+    updateSyncWidget('syncing');
+    const result = await pullAllFromSupabase(store);
+    if (result.ok) {
+      updateSyncWidget('synced');
+      refreshPage();
+    } else {
+      updateSyncWidget('error');
+    }
+  } catch (err) {
+    console.error('Auto-pull error:', err);
+    updateSyncWidget('error');
+  } finally {
+    _isPulling = false;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    pullLatestIfVisible();
+  }
+});
+
+window.addEventListener('focus', () => {
+  pullLatestIfVisible();
+});
+
+
 
 function updateSyncWidget(stateOverride) {
   const state = stateOverride || getSyncState();

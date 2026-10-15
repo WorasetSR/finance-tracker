@@ -237,7 +237,10 @@ export async function syncTransaction(tx) {
     headers: getHeaders(),
     body: JSON.stringify(row),
   });
-  if (!res.ok) console.warn('Supabase syncTransaction error:', res.status);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error('Supabase syncTransaction error:', res.status, errText);
+  }
 }
 
 export async function deleteTransaction(id) {
@@ -246,7 +249,10 @@ export async function deleteTransaction(id) {
     method: 'DELETE',
     headers: getHeaders(),
   });
-  if (!res.ok) console.warn('Supabase deleteTransaction error:', res.status);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error('Supabase deleteTransaction error:', res.status, errText);
+  }
 }
 
 // ── Pull All: Download latest state from Supabase to local ───
@@ -274,12 +280,68 @@ export async function pullAllFromSupabase(store) {
       txRes.json(),
     ]);
 
-    // If Supabase already has data, sync it into local stores
-    if (accRows.length || catRows.length || txRows.length) {
-      for (const r of accRows) await store.put('accounts', fromAccountRow(r));
-      for (const r of catRows) await store.put('categories', fromCategoryRow(r));
-      for (const r of bgtRows) await store.put('budgets', fromBudgetRow(r));
-      for (const r of txRows)  await store.put('transactions', fromTxRow(r));
+    // If Supabase is totally empty, but local store has records, auto-migrate local data to Supabase once!
+    if (accRows.length === 0 && catRows.length === 0 && txRows.length === 0) {
+      const localAccs = await store.getAll('accounts');
+      if (localAccs.length > 0) {
+        console.log('Supabase is empty, performing initial auto-migration from local store...');
+        await migrateAllToSupabase(store);
+        return { ok: true, count: 0 };
+      }
+    }
+
+    // 1. Reconcile transactions: delete local txs that are no longer in Supabase
+    const remoteTxIds = new Set(txRows.map(r => r.id));
+    const localTxs = await store.getAll('transactions');
+    for (const ltx of localTxs) {
+      if (!remoteTxIds.has(ltx.id)) {
+        await store.hardDelete('transactions', ltx.id);
+      }
+    }
+    for (const r of txRows) {
+      await store.put('transactions', fromTxRow(r));
+    }
+
+    // 2. Reconcile accounts
+    if (accRows.length > 0) {
+      const remoteAccIds = new Set(accRows.map(r => r.id));
+      const localAccs = await store.getAll('accounts');
+      for (const lacc of localAccs) {
+        if (!remoteAccIds.has(lacc.id)) {
+          await store.hardDelete('accounts', lacc.id);
+        }
+      }
+      for (const r of accRows) {
+        await store.put('accounts', fromAccountRow(r));
+      }
+    }
+
+    // 3. Reconcile categories
+    if (catRows.length > 0) {
+      const remoteCatIds = new Set(catRows.map(r => r.id));
+      const localCats = await store.getAll('categories');
+      for (const lcat of localCats) {
+        if (!remoteCatIds.has(lcat.id)) {
+          await store.hardDelete('categories', lcat.id);
+        }
+      }
+      for (const r of catRows) {
+        await store.put('categories', fromCategoryRow(r));
+      }
+    }
+
+    // 4. Reconcile budgets
+    if (bgtRows.length > 0) {
+      const remoteBgtIds = new Set(bgtRows.map(r => r.id));
+      const localBgts = await store.getAll('budgets');
+      for (const lbgt of localBgts) {
+        if (!remoteBgtIds.has(lbgt.id)) {
+          await store.hardDelete('budgets', lbgt.id);
+        }
+      }
+      for (const r of bgtRows) {
+        await store.put('budgets', fromBudgetRow(r));
+      }
     }
 
     localStorage.setItem('ft_last_sync', new Date().toISOString());
@@ -291,6 +353,7 @@ export async function pullAllFromSupabase(store) {
     return { ok: false, error: err.message };
   }
 }
+
 
 // ── One-Click Migration: Push all local records to Supabase ──
 

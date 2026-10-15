@@ -169,6 +169,18 @@ export class LocalStore {
     await this.put(store, record);
   }
 
+  /**
+   * Permanently delete a record from a store (used during remote reconciliation).
+   * @param {string} store
+   * @param {string} id
+   */
+  async hardDelete(store, id) {
+    const tx = this._tx(store, 'readwrite');
+    await this._req(tx.objectStore(store).delete(id));
+    await this._txDone(tx);
+  }
+
+
   // ── Typed queries ──────────────────────────────────────────
 
   /**
