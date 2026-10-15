@@ -56,7 +56,80 @@ export async function getDynamicFlashModels(apiKey) {
 
 
 /**
+ * Client-side image compression and resizing using HTML Canvas.
+ * Downscales images to maxDimension (default 1280px) and converts to JPEG (0.82 quality).
+ * Dramatically reduces payload size from ~8MB to ~150-250KB, avoids mobile tab memory exhaustion,
+ * and speeds up Gemini API transfer by 10x.
+ * @param {Blob|File} file
+ * @param {number} [maxDimension=1280]
+ * @param {number} [quality=0.82]
+ * @returns {Promise<Blob>}
+ */
+export async function compressImage(file, maxDimension = 1280, quality = 0.82) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return file;
+  }
+  if (!file || !file.type || !file.type.startsWith('image/')) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+
+      // Fill white background for transparent PNG/WebP before JPEG conversion
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob && (blob.size < file.size || file.type !== 'image/jpeg')) {
+            resolve(blob);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+/**
  * Convert a File or Blob into a base64 string.
+
  * @param {Blob} blob
  * @returns {Promise<{base64: string, mimeType: string}>}
  */
@@ -136,35 +209,56 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
 
   for (const modelPath of candidateModels) {
     const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey.trim()}`;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(10000),
-      });
+    let attempts = 0;
+    const maxAttempts = 2;
 
-      if (response.ok) {
-        winningModel = modelPath;
-        break;
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(20000),
+        });
+
+        if (response.ok) {
+          winningModel = modelPath;
+          break;
+        }
+
+        const errBody = await response.clone().json().catch(() => ({}));
+        lastErrorMsg = errBody.error?.message || `HTTP ${response.status}`;
+
+        // If rate limited (429), back off 2.5s and retry before moving to next candidate
+        if (response.status === 429) {
+          if (attempts < maxAttempts) {
+            console.warn(`Gemini 429 rate limit on ${modelPath}, retrying in 2.5s...`);
+            await new Promise(r => setTimeout(r, 2500));
+            continue;
+          }
+          break;
+        }
+
+        // If model deprecated, not found, or overloaded, continue to next candidate
+        if (response.status === 404 || response.status === 503 || lastErrorMsg.includes('no longer available') || lastErrorMsg.includes('not found')) {
+          break;
+        }
+
+        // For auth or permission errors, stop immediately
+        if (response.status === 400 || response.status === 403) {
+          throw new Error(`Gemini API Error: ${lastErrorMsg} (กรุณาตรวจสอบ API Key)`);
+        }
+      } catch (err) {
+        if (err.message.includes('API Key')) throw err;
+        lastErrorMsg = err.message;
+        if (err.name === 'TimeoutError' || err.message?.includes('aborted')) {
+          lastErrorMsg = 'การเชื่อมต่อใช้เวลานานเกินไป (Timeout 20s)';
+        }
       }
-
-      const errBody = await response.clone().json().catch(() => ({}));
-      lastErrorMsg = errBody.error?.message || `HTTP ${response.status}`;
-
-      // If model deprecated, not found, or overloaded, continue to next candidate
-      if (response.status === 404 || response.status === 503 || lastErrorMsg.includes('no longer available') || lastErrorMsg.includes('not found')) {
-        continue;
-      }
-
-      // For auth or permission errors, stop immediately
-      if (response.status === 400 || response.status === 403) {
-        throw new Error(`Gemini API Error: ${lastErrorMsg} (กรุณาตรวจสอบ API Key)`);
-      }
-    } catch (err) {
-      if (err.message.includes('API Key')) throw err;
-      lastErrorMsg = err.message;
     }
+
+    if (winningModel) break;
   }
 
   // Clear cache if previously cached model is now failing
@@ -192,10 +286,14 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
 
   let parsed;
   try {
-    // Clean code fences if returned despite responseMimeType
-    const cleaned = textContent.replace(/```json/g, '').replace(/```/g, '').trim();
-    parsed = JSON.parse(cleaned);
+    // Robust JSON extraction matching outermost {...}
+    const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON object found in Gemini response');
+    }
+    parsed = JSON.parse(jsonMatch[0]);
   } catch (err) {
+    console.error('Raw Gemini text:', textContent);
     throw new Error('รูปแบบข้อมูลสลิปไม่ถูกต้อง');
   }
 
