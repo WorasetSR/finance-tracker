@@ -121,16 +121,21 @@ async function showApp() {
   navigate('dashboard');
   updateSyncWidget();
 
-  // Pull latest data from GitHub on every boot
+  // Safe sync on boot: Only pull from GitHub if there are NO unsynced local changes
   if (isConfigured()) {
-    updateSyncWidget('syncing');
-    const result = await syncer.pullAll(store);
-    if (result.ok) {
-      updateSyncWidget('synced');
-      navigate('dashboard');
+    const queue = await store.getPendingQueue();
+    if (queue && queue.length > 0) {
+      updateSyncWidget('pending');
     } else {
-      updateSyncWidget('error');
-      // Silent fail on boot — user can retry via Settings
+      updateSyncWidget('syncing');
+      const result = await syncer.pullAll(store);
+      if (result.ok) {
+        updateSyncWidget('synced');
+        navigate('dashboard');
+      } else {
+        updateSyncWidget('error');
+        // Silent fail on boot — user can retry via Settings
+      }
     }
   }
 }
@@ -407,10 +412,20 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
 
   let txData;
   if (type === 'transfer') {
+    const fromId = document.getElementById('tx-from-account').value;
+    const toId   = document.getElementById('tx-to-account').value;
+    if (!fromId || !toId) {
+      showToast('กรุณาเลือกบัญชีต้นทางและปลายทาง', 'error');
+      return;
+    }
+    if (fromId === toId) {
+      showToast('ไม่สามารถโอนเงินเข้าบัญชีเดียวกันได้', 'error');
+      return;
+    }
     txData = {
       type, amountMinor, date, note,
-      fromAccountId: document.getElementById('tx-from-account').value,
-      toAccountId:   document.getElementById('tx-to-account').value,
+      fromAccountId: fromId,
+      toAccountId:   toId,
     };
   } else {
     txData = {
@@ -502,9 +517,13 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
     const existing = await store.get('accounts', editId);
     Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: false });
     await store.put('accounts', existing);
+    await store.addToPendingQueue({ id: editId, store: 'accounts', op: 'update' });
   } else {
-    await store.put('accounts', makeAccount(data));
+    const acc = makeAccount(data);
+    await store.put('accounts', acc);
+    await store.addToPendingQueue({ id: acc.id, store: 'accounts', op: 'create' });
   }
+  updateSyncWidget('pending');
 
   closeModal('account-modal');
   showToast(editId ? 'แก้ไขบัญชีแล้ว' : 'เพิ่มบัญชีแล้ว');
@@ -516,6 +535,8 @@ document.getElementById('btn-delete-account')?.addEventListener('click', async (
   const ok = await showConfirm('ลบบัญชี', 'ต้องการลบบัญชีนี้หรือไม่? รายการที่ผ่านมาจะยังคงอยู่');
   if (!ok) return;
   await store.softDelete('accounts', editId);
+  await store.addToPendingQueue({ id: editId, store: 'accounts', op: 'delete' });
+  updateSyncWidget('pending');
   closeModal('account-modal');
   showToast('ลบบัญชีแล้ว');
   refreshPage();
@@ -526,7 +547,7 @@ document.getElementById('btn-archive-account')?.addEventListener('click', async 
   if (!editId) return;
   const existing = await store.get('accounts', editId);
   if (!existing) return;
-  const isArchived = !!existing.archived;
+  const isArchived = !existing.archived;
   const action = isArchived ? 'กู้คืน' : 'จัดเก็บ';
   const ok = await showConfirm(
     action + 'บัญชี',
@@ -537,6 +558,8 @@ document.getElementById('btn-archive-account')?.addEventListener('click', async 
   if (!ok) return;
   Object.assign(existing, { archived: !isArchived, updatedAt: new Date().toISOString(), synced: false });
   await store.put('accounts', existing);
+  await store.addToPendingQueue({ id: editId, store: 'accounts', op: 'update' });
+  updateSyncWidget('pending');
   closeModal('account-modal');
   showToast(isArchived ? 'กู้คืนบัญชีแล้ว' : 'จัดเก็บบัญชีแล้ว');
   refreshPage();
@@ -581,11 +604,15 @@ document.getElementById('category-form')?.addEventListener('submit', async (e) =
 
   if (editId) {
     const existing = await store.get('categories', editId);
-    Object.assign(existing, data, { updatedAt: new Date().toISOString() });
+    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: false });
     await store.put('categories', existing);
+    await store.addToPendingQueue({ id: editId, store: 'categories', op: 'update' });
   } else {
-    await store.put('categories', makeCategory(data));
+    const cat = makeCategory(data);
+    await store.put('categories', cat);
+    await store.addToPendingQueue({ id: cat.id, store: 'categories', op: 'create' });
   }
+  updateSyncWidget('pending');
 
   closeModal('category-modal');
   showToast(editId ? 'แก้ไขหมวดหมู่แล้ว' : 'เพิ่มหมวดหมู่แล้ว');
@@ -597,6 +624,8 @@ document.getElementById('btn-delete-category')?.addEventListener('click', async 
   const ok = await showConfirm('ลบหมวดหมู่', 'ต้องการลบหมวดหมู่นี้หรือไม่?');
   if (!ok) return;
   await store.softDelete('categories', editId);
+  await store.addToPendingQueue({ id: editId, store: 'categories', op: 'delete' });
+  updateSyncWidget('pending');
   closeModal('category-modal');
   showToast('ลบหมวดหมู่แล้ว');
   refreshPage();
@@ -653,6 +682,8 @@ document.getElementById('btn-delete-budget')?.addEventListener('click', async ()
   const ok = await showConfirm('ลบงบประมาณ', 'ต้องการลบงบประมาณหมวดนี้หรือไม่?');
   if (!ok) return;
   await store.softDelete('budgets', editId);
+  await store.addToPendingQueue({ id: editId, store: 'budgets', op: 'delete' });
+  updateSyncWidget('pending');
   closeModal('budget-modal');
   showToast('ลบงบประมาณแล้ว');
   refreshPage();
@@ -677,11 +708,24 @@ document.getElementById('budget-form')?.addEventListener('submit', async (e) => 
 
   if (editId) {
     const existing = await store.get('budgets', editId);
-    Object.assign(existing, data, { updatedAt: new Date().toISOString() });
+    Object.assign(existing, data, { updatedAt: new Date().toISOString(), synced: false });
     await store.put('budgets', existing);
+    await store.addToPendingQueue({ id: editId, store: 'budgets', op: 'update' });
   } else {
-    await store.put('budgets', makeBudget(data));
+    // Check if budget for same category and month already exists
+    const allBudgets = await store.getAll('budgets');
+    const duplicate = allBudgets.find(b => !b.deletedAt && b.categoryId === data.categoryId && b.month === data.month);
+    if (duplicate) {
+      Object.assign(duplicate, data, { updatedAt: new Date().toISOString(), synced: false });
+      await store.put('budgets', duplicate);
+      await store.addToPendingQueue({ id: duplicate.id, store: 'budgets', op: 'update' });
+    } else {
+      const bgt = makeBudget(data);
+      await store.put('budgets', bgt);
+      await store.addToPendingQueue({ id: bgt.id, store: 'budgets', op: 'create' });
+    }
   }
+  updateSyncWidget('pending');
 
   closeModal('budget-modal');
   showToast(editId ? 'แก้ไขงบประมาณแล้ว' : 'ตั้งงบประมาณแล้ว');
@@ -961,11 +1005,59 @@ let _calcTarget = null;
 let _calcExpr   = '';
 
 function calcEval(expr) {
+  if (!expr || typeof expr !== 'string') return 0;
+  const cleaned = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/\s+/g, '');
+  if (!/^[\d+\-*/.()]+$/.test(cleaned)) return null;
+
   try {
-    const safe = expr.replace(/×/g, '*').replace(/÷/g, '/');
-    // Only allow digits, operators, dot, parens
-    if (!/^[\d+\-*/.() ]+$/.test(safe)) return null;
-    const result = Function('"use strict"; return (' + safe + ')')();
+    const tokens = cleaned.match(/(\d+(\.\d+)?|[+\-*/()])/g);
+    if (!tokens) return null;
+
+    let pos = 0;
+    function parsePrimary() {
+      const token = tokens[pos];
+      if (token === '(') {
+        pos++;
+        const val = parseAddSub();
+        if (tokens[pos] === ')') pos++;
+        return val;
+      }
+      if (token === '-') {
+        pos++;
+        return -parsePrimary();
+      }
+      if (token === '+') {
+        pos++;
+        return parsePrimary();
+      }
+      pos++;
+      const num = parseFloat(token);
+      return isNaN(num) ? 0 : num;
+    }
+
+    function parseMulDiv() {
+      let left = parsePrimary();
+      while (pos < tokens.length && (tokens[pos] === '*' || tokens[pos] === '/')) {
+        const op = tokens[pos++];
+        const right = parsePrimary();
+        if (op === '*') left = left * right;
+        else if (op === '/') left = right === 0 ? 0 : left / right;
+      }
+      return left;
+    }
+
+    function parseAddSub() {
+      let left = parseMulDiv();
+      while (pos < tokens.length && (tokens[pos] === '+' || tokens[pos] === '-')) {
+        const op = tokens[pos++];
+        const right = parseMulDiv();
+        if (op === '+') left = left + right;
+        else if (op === '-') left = left - right;
+      }
+      return left;
+    }
+
+    const result = parseAddSub();
     return isFinite(result) ? Math.round(result * 1e8) / 1e8 : null;
   } catch { return null; }
 }

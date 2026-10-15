@@ -193,7 +193,13 @@ export class GitHubSync {
     try {
       setSyncState('pending');
 
-      // Pull everything from GitHub
+      // Guard: Never wipe local store if there are unsynced pending changes in queue
+      const queue = await store.getPendingQueue();
+      if (queue && queue.length > 0) {
+        throw new Error('มีรายการที่ยังไม่ได้ Sync อยู่ในเครื่อง กรุณากด Sync All เพื่อส่งข้อมูลก่อน');
+      }
+
+      // Pull everything from GitHub FIRST before touching any local stores
       const [accFile, catFile, bgtFile] = await Promise.all([
         this.readFile('data/accounts.json'),
         this.readFile('data/categories.json'),
@@ -203,7 +209,7 @@ export class GitHubSync {
       const months  = await this._listTransactionMonths();
       const txFiles = await Promise.all(months.map(m => this.readFile(`data/transactions/${m}.json`)));
 
-      // Replace local stores completely
+      // Replace local stores safely now that remote payload is verified
       await store.clearStore('transactions');
       await store.clearStore('accounts');
       await store.clearStore('categories');

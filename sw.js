@@ -1,4 +1,4 @@
-const CACHE = 'ft-v2';
+const CACHE = 'ft-v2.1';
 
 const SHELL = [
   './',
@@ -35,11 +35,33 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  const url = e.request.url;
+  const reqUrl = new URL(e.request.url);
 
-  // Never intercept cross-origin requests — let browser handle natively
-  // This is critical for GitHub API (PUT/GET with auth headers must not go through SW)
-  if (!url.startsWith(self.location.origin)) return;
+  // Cache static CDN libraries (Chart.js, xlsx-js-style, Google Fonts) for offline support
+  const isCdn = reqUrl.hostname === 'cdn.jsdelivr.net' ||
+                reqUrl.hostname === 'fonts.googleapis.com' ||
+                reqUrl.hostname === 'fonts.gstatic.com';
+
+  if (isCdn) {
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        if (cached) return cached;
+        return fetch(e.request)
+          .then(res => {
+            if (res.ok) {
+              const clone = res.clone();
+              caches.open(CACHE).then(c => c.put(e.request, clone));
+            }
+            return res;
+          })
+          .catch(() => cached);
+      })
+    );
+    return;
+  }
+
+  // Never intercept other cross-origin requests — let browser handle natively (critical for GitHub API)
+  if (!e.request.url.startsWith(self.location.origin)) return;
 
   // Network-first for same-origin app files so updates propagate immediately
   e.respondWith(
