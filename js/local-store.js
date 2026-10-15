@@ -75,6 +75,7 @@ export class LocalStore {
     });
 
     await this.seedDefaults();
+    await this.ensureSystemCategories();
     return this._db;
   }
 
@@ -348,11 +349,26 @@ export class LocalStore {
     let expense = 0;
 
     for (const t of txs) {
+      // Exclude pending advances from user personal expenses so metrics don't inflate
+      if (t.isAdvance) continue;
+      // Exclude debt settlement from user personal income
+      if (t.isAdvanceSettlement) continue;
       if (t.type === 'income')  income  += t.amountMinor;
       if (t.type === 'expense') expense += t.amountMinor;
     }
 
     return { income, expense, net: income - expense };
+  }
+
+  /**
+   * Return all non-deleted advance transactions that are currently pending repayment.
+   * @returns {Promise<Object[]>}
+   */
+  async getPendingAdvances() {
+    const all = await this.getAll(STORES.TRANSACTIONS);
+    return all
+      .filter(t => !t.deletedAt && t.isAdvance && t.advanceStatus === 'pending')
+      .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
   }
 
   // ── Seeding ────────────────────────────────────────────────
@@ -381,5 +397,21 @@ export class LocalStore {
     }
 
     await this._txDone(tx);
+  }
+
+  /**
+   * Ensure system categories (cat_advance, cat_settle) exist in the categories store.
+   */
+  async ensureSystemCategories() {
+    const advanceCat = await this.get(STORES.CATEGORIES, 'cat_advance');
+    if (!advanceCat) {
+      const defAdvance = DEFAULT_CATEGORIES.find(c => c.id === 'cat_advance');
+      if (defAdvance) await this.put(STORES.CATEGORIES, defAdvance);
+    }
+    const settleCat = await this.get(STORES.CATEGORIES, 'cat_settle');
+    if (!settleCat) {
+      const defSettle = DEFAULT_CATEGORIES.find(c => c.id === 'cat_settle');
+      if (defSettle) await this.put(STORES.CATEGORIES, defSettle);
+    }
   }
 }

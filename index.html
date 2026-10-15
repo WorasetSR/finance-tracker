@@ -296,6 +296,17 @@
           <label for="tx-note">โน้ต</label>
           <input type="text" id="tx-note" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)" />
         </div>
+        <!-- Advance Toggle (เพื่อนฝากจ่ายก่อน) -->
+        <div class="field" id="grp-advance" style="margin-top:6px">
+          <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="tx-is-advance" />
+            <span style="font-weight:600;font-size:13px">ออกให้คนอื่นก่อน (รอเก็บเงินคืน)</span>
+          </label>
+          <div id="tx-advance-details" class="hidden" style="margin-top:8px">
+            <input type="text" id="tx-advance-to" placeholder="ระบุชื่อเพื่อน หรือคนที่ฝากจ่าย (เช่น บอย, มายด์)" />
+            <span class="field-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px">ระบบจะไม่นับเป็นรายจ่ายส่วนตัว และนำไปแสดงในรายการรอเก็บเงิน</span>
+          </div>
+        </div>
         <div class="modal-actions">
           <button type="button" id="btn-delete-tx" class="btn-danger hidden">ลบรายการ</button>
           <div class="modal-actions-right">
@@ -533,13 +544,52 @@
                 <select id="slip-account" required></select>
               </div>
             </div>
-            <div class="field">
-              <label>หมวดหมู่ (จัดให้อัตโนมัติจาก Habit Engine)</label>
-              <select id="slip-category" required></select>
+            <!-- Split Mode Toggle -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px">
+              <span style="font-size:12px;color:var(--text-muted)">แบ่งหลายหมวด / มีคนฝากจ่าย?</span>
+              <button type="button" class="btn-ghost btn-sm" id="btn-toggle-split" style="font-size:12px;padding:4px 10px;border:1px solid var(--border)">
+                ➗ แยกหลายรายการ
+              </button>
             </div>
-            <div class="field">
-              <label>บันทึกช่วยจำ (Memo จากสลิป)</label>
-              <input type="text" id="slip-note" placeholder="โน้ตช่วยจำ" />
+
+            <!-- Single Item Section (Default) -->
+            <div id="slip-single-section">
+              <div class="field">
+                <label>หมวดหมู่ (จัดให้อัตโนมัติจาก Habit Engine)</label>
+                <select id="slip-category"></select>
+              </div>
+              <div class="field">
+                <label>บันทึกช่วยจำ (Memo จากสลิป)</label>
+                <input type="text" id="slip-note" placeholder="โน้ตช่วยจำ" />
+              </div>
+              <div class="field" style="margin-top:6px">
+                <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <input type="checkbox" id="slip-is-advance" />
+                  <span style="font-size:13px;font-weight:600">ออกให้คนอื่นก่อนทั้งบิล (รอเก็บเงินคืน)</span>
+                </label>
+                <div id="slip-advance-details" class="hidden" style="margin-top:8px">
+                  <input type="text" id="slip-advance-to" placeholder="ระบุชื่อเพื่อน หรือคนที่ฝากจ่าย (เช่น บอย)" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Split Items Section (Shown when user clicks Split) -->
+            <div id="slip-split-section" class="hidden">
+              <div id="split-countdown-banner" class="split-banner pending">
+                <span>คงเหลือต้องจัดสรร:</span>
+                <span id="split-remaining-val" class="mono" style="font-size:15px;font-weight:700">0.00 ฿</span>
+              </div>
+              <div id="split-items-container" class="split-items-container">
+                <!-- Dynamically populated sub-item rows -->
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button type="button" class="btn-ghost btn-sm" id="btn-add-split-item" style="flex:1;border:1px dashed var(--border)">
+                  + เพิ่มรายการย่อย
+                </button>
+                <button type="button" class="btn-ghost btn-sm" id="btn-fill-remaining" style="border:1px solid var(--border)" title="นำยอดคงเหลือที่เหลืออยู่ไปใส่ในรายการล่าสุด">
+                  ⚡ เติมยอดคงเหลือ
+                </button>
+              </div>
             </div>
             <div class="modal-actions" style="margin-top:18px">
               <button type="button" class="btn-ghost" id="btn-slip-skip">ข้ามใบนี้</button>

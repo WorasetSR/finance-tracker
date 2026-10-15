@@ -2319,3 +2319,128 @@ img  { display: block; max-width: 100%; }
   margin-bottom: 12px;
 }
 
+/* ── Split Transaction Countdown Styles ── */
+.split-banner {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.split-banner.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #D97706;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.split-banner.matched {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.split-banner.over {
+  background: rgba(239, 68, 68, 0.12);
+  color: #DC2626;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.split-items-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.split-row {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.split-row-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.split-row-bottom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.split-advance-box {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px dashed rgba(245, 158, 11, 0.3);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+/* ── Receivables Card on Dashboard ── */
+.receivables-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.receivable-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.receivable-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.receivable-name {
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.receivable-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.receivable-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.badge-advance {
+  background: rgba(245, 158, 11, 0.15);
+  color: #D97706;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.badge-advance.settled {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+

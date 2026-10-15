@@ -4,7 +4,8 @@
 // ─────────────────────────────────────────────────────────────
 
 import { formatTHB, formatMonth, formatDateRelative } from '../format.js';
-import { currentMonth } from '../schema.js';
+import { currentMonth, makeTransaction, todayStr } from '../schema.js';
+import { syncTransaction } from '../supabase-client.js';
 
 let chartInstance = null;
 
@@ -37,15 +38,16 @@ function sortByOrder(accounts) {
   });
 }
 
-export async function initDashboard(container, store, { openTxModal, showToast }) {
+export async function initDashboard(container, store, { openTxModal, showToast, showConfirm }) {
   let month = currentMonth();
 
   async function render() {
-    const [summary, accounts, txs, categories] = await Promise.all([
+    const [summary, accounts, txs, categories, pendingAdvances] = await Promise.all([
       store.getMonthSummary(month),
       store.getAccounts(),
       store.getTransactions({ month }),
       store.getCategories(),
+      store.getPendingAdvances(),
     ]);
 
     const balancePromises = accounts.map(a => store.computeBalance(a.id).then(b => ({ ...a, balance: b })));
@@ -71,7 +73,7 @@ export async function initDashboard(container, store, { openTxModal, showToast }
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const catTotals = {};
     for (const tx of txs) {
-      if (tx.type !== 'expense') continue;
+      if (tx.type !== 'expense' || tx.isAdvance) continue;
       const cat = catMap[tx.categoryId];
       if (!cat) continue;
       catTotals[tx.categoryId] = (catTotals[tx.categoryId] || { cat, total: 0 });
@@ -169,6 +171,37 @@ export async function initDashboard(container, store, { openTxModal, showToast }
           </div>
         </div>
 
+        ${pendingAdvances && pendingAdvances.length > 0 ? `
+          <!-- Receivables (ยอดรอเพื่อนเคลียร์) -->
+          <div class="card" id="card-receivables">
+            <div class="card-header">
+              <h2 class="card-title">🤝 ยอดรอเพื่อนเคลียร์ (${pendingAdvances.length})</h2>
+              <span class="mono" style="font-weight:700;color:#D97706">
+                รวม ${formatTHB(pendingAdvances.reduce((s, a) => s + a.amountMinor, 0))}
+              </span>
+            </div>
+            <div class="receivables-container">
+              ${pendingAdvances.map(adv => `
+                <div class="receivable-row" data-adv-id="${adv.id}">
+                  <div class="receivable-left">
+                    <span class="receivable-name">
+                      <span class="badge-advance">รอเคลียร์</span>
+                      <strong>${adv.advanceTo || 'เพื่อน'}</strong>
+                    </span>
+                    <span class="receivable-meta">${formatDateRelative(adv.date)}${adv.note ? ' · ' + adv.note : ''}</span>
+                  </div>
+                  <div class="receivable-right">
+                    <span class="mono" style="font-weight:700;color:#D97706">${formatTHB(adv.amountMinor)}</span>
+                    <button type="button" class="btn-primary btn-sm btn-settle-adv" data-adv-id="${adv.id}" style="padding:4px 10px;font-size:12px">
+                      ✓ คืนแล้ว
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Recent transactions -->
         <div class="card">
           <div class="card-header">
@@ -184,7 +217,11 @@ export async function initDashboard(container, store, { openTxModal, showToast }
                   <div class="tx-row" data-tx-id="${tx.id}">
                     <span class="tx-icon">${cat?.icon || (tx.type === 'transfer' ? '↔️' : tx.type === 'income' ? '💰' : '💸')}</span>
                     <div class="tx-info">
-                      <span class="tx-name">${cat?.name || (tx.type === 'transfer' ? 'โอนเงิน' : 'ไม่ระบุ')}</span>
+                      <span class="tx-name">
+                        ${cat?.name || (tx.type === 'transfer' ? 'โอนเงิน' : 'ไม่ระบุ')}
+                        ${tx.isAdvance ? `<span class="badge-advance ${tx.advanceStatus === 'settled' ? 'settled' : ''}" style="margin-left:6px">${tx.advanceStatus === 'settled' ? '✓ คืนแล้ว: ' : 'รอคืน: '}${tx.advanceTo || 'เพื่อน'}</span>` : ''}
+                        ${tx.isAdvanceSettlement ? `<span class="badge-advance settled" style="margin-left:6px">✓ รับเงินคืน</span>` : ''}
+                      </span>
                       <span class="tx-meta">${formatDateRelative(tx.date)}${tx.note ? ' · ' + tx.note : ''}</span>
                     </div>
                     <span class="tx-amount mono ${tx.type === 'income' ? 'income' : tx.type === 'expense' ? 'expense' : ''}">
@@ -215,6 +252,48 @@ export async function initDashboard(container, store, { openTxModal, showToast }
     // Tx row clicks
     container.querySelectorAll('.tx-row[data-tx-id]').forEach(row => {
       row.addEventListener('click', () => openTxModal(row.dataset.txId));
+    });
+
+    // Advance settlement clicks
+    container.querySelectorAll('.btn-settle-adv').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const advId = btn.dataset.advId;
+        const adv = await store.get('transactions', advId);
+        if (!adv) return;
+
+        const friendName = adv.advanceTo || 'เพื่อน';
+        const ok = await showConfirm(
+          'บันทึกว่าได้รับเงินคืน',
+          `ยืนยันว่าได้รับเงินคืนจาก ${friendName} จำนวน ${formatTHB(adv.amountMinor)} เรียบร้อยแล้ว?`
+        );
+        if (!ok) return;
+
+        // 1. Mark original advance as settled
+        adv.advanceStatus = 'settled';
+        adv.settledAt = new Date().toISOString();
+        adv.updatedAt = new Date().toISOString();
+        await store.put('transactions', adv);
+        await store.addToPendingQueue({ id: adv.id, store: 'transactions', op: 'update' });
+        syncTransaction(adv).catch(console.error);
+
+        // 2. Create settlement income transaction into the same account
+        const settleTx = makeTransaction({
+          type: 'income',
+          amountMinor: adv.amountMinor,
+          date: todayStr(),
+          accountId: adv.accountId,
+          categoryId: 'cat_settle',
+          note: `รับเงินคืนจาก ${friendName}` + (adv.note ? ` (${adv.note})` : ''),
+          isAdvanceSettlement: true,
+        });
+        await store.put('transactions', settleTx);
+        await store.addToPendingQueue({ id: settleTx.id, store: 'transactions', op: 'create' });
+        syncTransaction(settleTx).catch(console.error);
+
+        showToast(`บันทึกรับเงินคืนจาก ${friendName} เรียบร้อยแล้ว 🎉`);
+        render();
+      });
     });
 
     // Checkbox sum

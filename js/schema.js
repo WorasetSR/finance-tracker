@@ -83,6 +83,12 @@ export function makeTransaction({
   categoryId = null,
   fromAccountId = null,
   toAccountId   = null,
+  splitGroupId  = null,
+  isAdvance     = false,
+  advanceTo     = '',
+  advanceStatus = null,
+  settledAt     = null,
+  isAdvanceSettlement = false,
 } = {}) {
   const now = nowISO();
   return {
@@ -97,6 +103,12 @@ export function makeTransaction({
     fromAccountId:  fromAccountId ?? null,
     toAccountId:    toAccountId   ?? null,
     transferId:     null,
+    splitGroupId:   splitGroupId  ?? null,
+    isAdvance:      Boolean(isAdvance),
+    advanceTo:      advanceTo     ?? '',
+    advanceStatus:  advanceStatus ?? (isAdvance ? 'pending' : null),
+    settledAt:      settledAt     ?? null,
+    isAdvanceSettlement: Boolean(isAdvanceSettlement),
     createdAt:      now,
     updatedAt:      now,
     deletedAt:      null,
@@ -230,10 +242,12 @@ export const DEFAULT_CATEGORIES = [
   { id: 'cat_entertain', name: 'บันเทิง',     icon: '🎮', type: 'expense', ..._SEED_COMMON },
   { id: 'cat_housing',   name: 'ที่พัก',      icon: '🏠', type: 'expense', ..._SEED_COMMON },
   { id: 'cat_education', name: 'การศึกษา',    icon: '📚', type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_advance',   name: 'ออกให้คนอื่นก่อน', icon: '🤝', type: 'expense', ..._SEED_COMMON },
   { id: 'cat_other_exp', name: 'อื่นๆ',       icon: '📦', type: 'expense', ..._SEED_COMMON },
   // ── Income ───────────────────────────────────────────────
   { id: 'cat_salary',    name: 'เงินเดือน',    icon: '💼', type: 'income', ..._SEED_COMMON },
   { id: 'cat_freelance', name: 'รายได้พิเศษ', icon: '💡', type: 'income', ..._SEED_COMMON },
   { id: 'cat_invest',    name: 'ลงทุน',        icon: '📈', type: 'income', ..._SEED_COMMON },
+  { id: 'cat_settle',    name: 'ได้รับเงินคืน', icon: '💸', type: 'income', ..._SEED_COMMON },
   { id: 'cat_other_inc', name: 'อื่นๆ',        icon: '💰', type: 'income', ..._SEED_COMMON },
 ];

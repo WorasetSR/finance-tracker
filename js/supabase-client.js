@@ -133,13 +133,33 @@ function fromBudgetRow(r) {
   };
 }
 
-function toTxRow(t) {
+export function toTxRow(t) {
+  let note = t.note || '';
+  if (t.isAdvance) {
+    const tag = `[ฝากจ่าย:${t.advanceTo || 'เพื่อน'}:${t.advanceStatus || 'pending'}]`;
+    if (!note.includes('[ฝากจ่าย:')) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
+  if (t.isAdvanceSettlement) {
+    const tag = `[เคลียร์ฝากจ่าย]`;
+    if (!note.includes(tag)) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
+  if (t.splitGroupId) {
+    const tag = `[split:${t.splitGroupId}]`;
+    if (!note.includes('[split:')) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
+
   return {
     id: t.id,
     type: t.type,
     amount_minor: t.amountMinor,
     date: t.date,
-    note: t.note || '',
+    note,
     account_id: t.accountId || null,
     category_id: t.categoryId || null,
     from_account_id: t.fromAccountId || null,
@@ -149,13 +169,46 @@ function toTxRow(t) {
   };
 }
 
-function fromTxRow(r) {
+export function fromTxRow(r) {
+  const rawNote = r.note || '';
+  let note = rawNote;
+  let isAdvance = false;
+  let advanceTo = '';
+  let advanceStatus = null;
+  let isAdvanceSettlement = false;
+  let splitGroupId = null;
+
+  const advMatch = rawNote.match(/\[ฝากจ่าย:(.*?):(pending|settled)\]/);
+  if (advMatch) {
+    isAdvance = true;
+    advanceTo = advMatch[1];
+    advanceStatus = advMatch[2];
+    note = note.replace(advMatch[0], '').trim();
+  }
+
+  if (rawNote.includes('[เคลียร์ฝากจ่าย]')) {
+    isAdvanceSettlement = true;
+    note = note.replace('[เคลียร์ฝากจ่าย]', '').trim();
+  }
+
+  const splitMatch = rawNote.match(/\[split:(.*?)\]/);
+  if (splitMatch) {
+    splitGroupId = splitMatch[1];
+    note = note.replace(splitMatch[0], '').trim();
+  }
+
   return {
     id: r.id,
     type: r.type,
     amountMinor: Number(r.amount_minor || 0),
     date: r.date,
-    note: r.note || '',
+    note,
+    rawNote,
+    isAdvance,
+    advanceTo,
+    advanceStatus,
+    isAdvanceSettlement,
+    splitGroupId,
     accountId: r.account_id || null,
     categoryId: r.category_id || null,
     fromAccountId: r.from_account_id || null,

@@ -431,6 +431,15 @@ async function openTxModal(txId = null) {
         .map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
       catSel.value = tx.categoryId || '';
     }
+
+    // Set advance fields
+    const isAdv = Boolean(tx.isAdvance);
+    const advCheck = document.getElementById('tx-is-advance');
+    const advBox   = document.getElementById('tx-advance-details');
+    const advInput = document.getElementById('tx-advance-to');
+    if (advCheck) advCheck.checked = isAdv;
+    if (advBox) advBox.classList.toggle('hidden', !isAdv);
+    if (advInput) advInput.value = tx.advanceTo || '';
   } else {
     // Add mode
     titleEl.textContent = 'เพิ่มรายการ';
@@ -441,6 +450,13 @@ async function openTxModal(txId = null) {
     document.getElementById('tx-amount').value = '';
     document.getElementById('tx-date').value   = todayStr();
     document.getElementById('tx-note').value   = '';
+
+    const advCheck = document.getElementById('tx-is-advance');
+    const advBox   = document.getElementById('tx-advance-details');
+    const advInput = document.getElementById('tx-advance-to');
+    if (advCheck) advCheck.checked = false;
+    if (advBox) advBox.classList.add('hidden');
+    if (advInput) advInput.value = '';
 
     const catSel = document.getElementById('tx-category');
     catSel.innerHTML = expCats.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
@@ -460,6 +476,7 @@ function setTxType(type) {
   document.getElementById('grp-from-account').classList.toggle('hidden', !isTransfer);
   document.getElementById('grp-to-account').classList.toggle('hidden', !isTransfer);
   document.getElementById('grp-category').classList.toggle('hidden', isTransfer);
+  document.getElementById('grp-advance')?.classList.toggle('hidden', type !== 'expense');
 
   // Update category options on type change
   if (!isTransfer) {
@@ -475,6 +492,11 @@ function setTxType(type) {
 document.getElementById('tx-type-tabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.type-tab');
   if (tab) setTxType(tab.dataset.type);
+});
+
+// Advance toggle in tx modal
+document.getElementById('tx-is-advance')?.addEventListener('change', (e) => {
+  document.getElementById('tx-advance-details')?.classList.toggle('hidden', !e.target.checked);
 });
 
 // Transaction form submit
@@ -511,10 +533,15 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
       toAccountId:   toId,
     };
   } else {
+    const isAdv = document.getElementById('tx-is-advance')?.checked && type === 'expense';
+    const advTo = document.getElementById('tx-advance-to')?.value.trim();
     txData = {
       type, amountMinor, date, note,
       accountId:  document.getElementById('tx-account').value,
-      categoryId: document.getElementById('tx-category').value,
+      categoryId: isAdv ? 'cat_advance' : document.getElementById('tx-category').value,
+      isAdvance:  Boolean(isAdv),
+      advanceTo:  isAdv ? (advTo || 'เพื่อน') : '',
+      advanceStatus: isAdv ? 'pending' : null,
     };
   }
 
@@ -569,6 +596,9 @@ let currentSlipIndex = 0;
 let currentParsedData = null;
 let currentThumbUrl = null;
 let isProcessingSlip = false;
+let isSplitMode = false;
+let splitItems = [];
+let allExpenseCategories = [];
 
 function revokeCurrentThumb() {
   if (currentThumbUrl) {
@@ -577,12 +607,228 @@ function revokeCurrentThumb() {
   }
 }
 
+function setSplitMode(enabled) {
+  isSplitMode = enabled;
+  const toggleBtn = document.getElementById('btn-toggle-split');
+  const singleSec = document.getElementById('slip-single-section');
+  const splitSec  = document.getElementById('slip-split-section');
+
+  if (toggleBtn) toggleBtn.textContent = enabled ? '← รวมเป็น 1 รายการ' : '➗ แยกหลายรายการ';
+  singleSec?.classList.toggle('hidden', enabled);
+  splitSec?.classList.toggle('hidden', !enabled);
+
+  if (enabled) {
+    if (!splitItems.length) {
+      const fullAmtMinor = parseAmount(document.getElementById('slip-amount')?.value) || currentParsedData?.amountMinor || 0;
+      const catId = document.getElementById('slip-category')?.value || (allExpenseCategories[0]?.id || 'cat_food');
+      const note = document.getElementById('slip-note')?.value || currentParsedData?.memo || '';
+      splitItems = [{
+        id: Math.random().toString(36).slice(2, 8),
+        categoryId: catId,
+        amountMinor: fullAmtMinor,
+        note: note,
+        isAdvance: false,
+        advanceTo: '',
+      }];
+    }
+    renderSplitItems();
+  } else {
+    document.getElementById('btn-slip-save')?.removeAttribute('disabled');
+  }
+}
+
+function renderSplitItems() {
+  const container = document.getElementById('split-items-container');
+  const banner = document.getElementById('split-countdown-banner');
+  const remainingVal = document.getElementById('split-remaining-val');
+  const saveBtn = document.getElementById('btn-slip-save');
+  const fullSlipAmountMinor = parseAmount(document.getElementById('slip-amount')?.value) || 0;
+
+  const allocatedMinor = splitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
+  const remainingMinor = fullSlipAmountMinor - allocatedMinor;
+
+  if (banner && remainingVal) {
+    banner.className = 'split-banner';
+    if (remainingMinor === 0) {
+      banner.classList.add('matched');
+      banner.querySelector('span:first-child').textContent = '✓ จัดสรรครบลงตัวพอดี:';
+      remainingVal.textContent = '0.00 ฿';
+      if (saveBtn) saveBtn.disabled = false;
+    } else if (remainingMinor > 0) {
+      banner.classList.add('pending');
+      banner.querySelector('span:first-child').textContent = 'คงเหลือต้องจัดสรร:';
+      remainingVal.textContent = `${(remainingMinor / 100).toFixed(2)} ฿`;
+      if (saveBtn) saveBtn.disabled = true;
+    } else {
+      banner.classList.add('over');
+      banner.querySelector('span:first-child').textContent = '⚠️ เกินยอดสลิปไป:';
+      remainingVal.textContent = `${(Math.abs(remainingMinor) / 100).toFixed(2)} ฿`;
+      if (saveBtn) saveBtn.disabled = true;
+    }
+  }
+
+  if (!container) return;
+
+  const catOpts = (selectedCatId) => allExpenseCategories
+    .map(c => `<option value="${c.id}" ${c.id === selectedCatId ? 'selected' : ''}>${c.icon || ''} ${c.name}</option>`)
+    .join('');
+
+  container.innerHTML = splitItems.map(item => `
+    <div class="split-row" data-id="${item.id}">
+      <div class="split-row-top">
+        <select class="split-item-cat" style="flex:1" data-id="${item.id}">
+          ${catOpts(item.categoryId)}
+        </select>
+        <input type="number" step="any" class="mono split-item-amt" data-id="${item.id}" value="${(item.amountMinor / 100).toFixed(2)}" placeholder="0.00" style="width:110px;font-weight:700" />
+        ${splitItems.length > 1 ? `<button type="button" class="icon-btn btn-del-split" data-id="${item.id}" title="ลบรายการนี้" style="color:var(--expense)">✕</button>` : ''}
+      </div>
+      <div class="split-row-bottom">
+        <input type="text" class="split-item-note" data-id="${item.id}" value="${item.note || ''}" placeholder="โน้ตย่อย (เช่น ชาบูนาย A, ขนม)" style="flex:1;font-size:12px" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" class="split-item-advance-check" data-id="${item.id}" ${item.isAdvance ? 'checked' : ''} />
+          <span>ฝากจ่าย</span>
+        </label>
+      </div>
+      <div class="split-advance-box ${item.isAdvance ? '' : 'hidden'}" id="adv-box-${item.id}">
+        <input type="text" class="split-item-advance-to" data-id="${item.id}" value="${item.advanceTo || ''}" placeholder="ระบุชื่อเพื่อน (เช่น บอย)" style="font-size:12px;padding:4px 8px;width:100%" />
+      </div>
+    </div>
+  `).join('');
+
+  // Wire events
+  container.querySelectorAll('.split-item-amt').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = splitItems.find(x => x.id === inp.dataset.id);
+      if (it) {
+        it.amountMinor = parseAmount(inp.value);
+        updateCountdownBannerOnly();
+      }
+    });
+  });
+
+  container.querySelectorAll('.split-item-cat').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const it = splitItems.find(x => x.id === sel.dataset.id);
+      if (it) it.categoryId = sel.value;
+    });
+  });
+
+  container.querySelectorAll('.split-item-note').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = splitItems.find(x => x.id === inp.dataset.id);
+      if (it) it.note = inp.value;
+    });
+  });
+
+  container.querySelectorAll('.split-item-advance-check').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const it = splitItems.find(x => x.id === chk.dataset.id);
+      if (it) {
+        it.isAdvance = chk.checked;
+        const advBox = document.getElementById(`adv-box-${it.id}`);
+        advBox?.classList.toggle('hidden', !chk.checked);
+        if (chk.checked) it.categoryId = 'cat_advance';
+      }
+    });
+  });
+
+  container.querySelectorAll('.split-item-advance-to').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = splitItems.find(x => x.id === inp.dataset.id);
+      if (it) it.advanceTo = inp.value;
+    });
+  });
+
+  container.querySelectorAll('.btn-del-split').forEach(btn => {
+    btn.addEventListener('click', () => {
+      splitItems = splitItems.filter(x => x.id !== btn.dataset.id);
+      renderSplitItems();
+    });
+  });
+}
+
+function updateCountdownBannerOnly() {
+  const banner = document.getElementById('split-countdown-banner');
+  const remainingVal = document.getElementById('split-remaining-val');
+  const saveBtn = document.getElementById('btn-slip-save');
+  const fullSlipAmountMinor = parseAmount(document.getElementById('slip-amount')?.value) || 0;
+
+  const allocatedMinor = splitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
+  const remainingMinor = fullSlipAmountMinor - allocatedMinor;
+
+  if (banner && remainingVal) {
+    banner.className = 'split-banner';
+    if (remainingMinor === 0) {
+      banner.classList.add('matched');
+      banner.querySelector('span:first-child').textContent = '✓ จัดสรรครบลงตัวพอดี:';
+      remainingVal.textContent = '0.00 ฿';
+      if (saveBtn) saveBtn.disabled = false;
+    } else if (remainingMinor > 0) {
+      banner.classList.add('pending');
+      banner.querySelector('span:first-child').textContent = 'คงเหลือต้องจัดสรร:';
+      remainingVal.textContent = `${(remainingMinor / 100).toFixed(2)} ฿`;
+      if (saveBtn) saveBtn.disabled = true;
+    } else {
+      banner.classList.add('over');
+      banner.querySelector('span:first-child').textContent = '⚠️ เกินยอดสลิปไป:';
+      remainingVal.textContent = `${(Math.abs(remainingMinor) / 100).toFixed(2)} ฿`;
+      if (saveBtn) saveBtn.disabled = true;
+    }
+  }
+}
+
+// Split Mode Listeners
+document.getElementById('btn-toggle-split')?.addEventListener('click', () => {
+  setSplitMode(!isSplitMode);
+});
+
+document.getElementById('btn-add-split-item')?.addEventListener('click', () => {
+  const fullSlipAmountMinor = parseAmount(document.getElementById('slip-amount')?.value) || 0;
+  const allocatedMinor = splitItems.reduce((sum, item) => sum + (item.amountMinor || 0), 0);
+  const remainingMinor = Math.max(0, fullSlipAmountMinor - allocatedMinor);
+  splitItems.push({
+    id: Math.random().toString(36).slice(2, 8),
+    categoryId: allExpenseCategories[0]?.id || 'cat_food',
+    amountMinor: remainingMinor,
+    note: '',
+    isAdvance: false,
+    advanceTo: '',
+  });
+  renderSplitItems();
+});
+
+document.getElementById('btn-fill-remaining')?.addEventListener('click', () => {
+  if (!splitItems.length) return;
+  const fullSlipAmountMinor = parseAmount(document.getElementById('slip-amount')?.value) || 0;
+  const otherAllocated = splitItems.slice(0, -1).reduce((sum, item) => sum + (item.amountMinor || 0), 0);
+  const remainingForLast = Math.max(0, fullSlipAmountMinor - otherAllocated);
+  splitItems[splitItems.length - 1].amountMinor = remainingForLast;
+  renderSplitItems();
+});
+
+document.getElementById('slip-is-advance')?.addEventListener('change', (e) => {
+  document.getElementById('slip-advance-details')?.classList.toggle('hidden', !e.target.checked);
+});
+
+document.getElementById('slip-amount')?.addEventListener('input', () => {
+  if (isSplitMode) updateCountdownBannerOnly();
+});
+
 async function openSlipModal() {
   revokeCurrentThumb();
   slipQueue = [];
   currentSlipIndex = 0;
   currentParsedData = null;
   isProcessingSlip = false;
+  setSplitMode(false);
+  splitItems = [];
+
+  const slipAdvCheck = document.getElementById('slip-is-advance');
+  const slipAdvBox   = document.getElementById('slip-advance-details');
+  const slipAdvInput = document.getElementById('slip-advance-to');
+  if (slipAdvCheck) slipAdvCheck.checked = false;
+  if (slipAdvBox) slipAdvBox.classList.add('hidden');
+  if (slipAdvInput) slipAdvInput.value = '';
 
   document.getElementById('slip-drop-section')?.classList.remove('hidden');
   document.getElementById('slip-loading-section')?.classList.add('hidden');
@@ -682,7 +928,7 @@ async function processCurrentSlip() {
     };
     await populateSlipPreview(currentParsedData);
   } finally {
-    if (saveBtn) saveBtn.disabled = false;
+    if (saveBtn && (!isSplitMode || splitItems.length === 0)) saveBtn.disabled = false;
     if (skipBtn) skipBtn.disabled = false;
     isProcessingSlip = false;
   }
@@ -693,6 +939,17 @@ async function populateSlipPreview(parsed) {
     store.getAccounts(),
     store.getCategories('expense'),
   ]);
+
+  allExpenseCategories = categories;
+  setSplitMode(false);
+  splitItems = [];
+
+  const slipAdvCheck = document.getElementById('slip-is-advance');
+  const slipAdvBox   = document.getElementById('slip-advance-details');
+  const slipAdvInput = document.getElementById('slip-advance-to');
+  if (slipAdvCheck) slipAdvCheck.checked = false;
+  if (slipAdvBox) slipAdvBox.classList.add('hidden');
+  if (slipAdvInput) slipAdvInput.value = '';
 
   const accSelect = document.getElementById('slip-account');
   const catSelect = document.getElementById('slip-category');
@@ -741,40 +998,83 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
   if (saveBtn) saveBtn.disabled = true;
   if (skipBtn) skipBtn.disabled = true;
 
-  const amountMinor = parseAmount(document.getElementById('slip-amount').value);
-  const date        = document.getElementById('slip-date').value;
-  const accountId   = document.getElementById('slip-account').value;
-  const categoryId  = document.getElementById('slip-category').value;
-  const note        = document.getElementById('slip-note').value.trim();
+  const fullAmountMinor = parseAmount(document.getElementById('slip-amount').value);
+  const date            = document.getElementById('slip-date').value;
+  const accountId       = document.getElementById('slip-account').value;
 
-  if (!amountMinor || amountMinor <= 0) {
+  if (!fullAmountMinor || fullAmountMinor <= 0) {
     showToast('กรุณาระบุจำนวนเงิน', 'error');
     if (saveBtn) saveBtn.disabled = false;
     if (skipBtn) skipBtn.disabled = false;
     return;
   }
 
-  const tx = makeTransaction({
-    type: 'expense',
-    amountMinor,
-    date,
-    accountId,
-    categoryId,
-    note,
-  });
+  if (isSplitMode) {
+    const allocatedMinor = splitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
+    if (allocatedMinor !== fullAmountMinor) {
+      showToast('กรุณาจัดสรรยอดให้ลงตัวพอดี 0.00 ฿ ก่อนบันทึก', 'error');
+      if (saveBtn) saveBtn.disabled = false;
+      if (skipBtn) skipBtn.disabled = false;
+      return;
+    }
 
-  await store.put('transactions', tx);
-  await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
-  syncTransaction(tx).catch(console.error);
+    const splitGroupId = genId('split');
+    for (const item of splitItems) {
+      if (!item.amountMinor || item.amountMinor <= 0) continue;
+      const tx = makeTransaction({
+        type: 'expense',
+        amountMinor: item.amountMinor,
+        date,
+        accountId,
+        categoryId: item.isAdvance ? 'cat_advance' : item.categoryId,
+        note: item.note,
+        splitGroupId,
+        isAdvance: item.isAdvance,
+        advanceTo: item.advanceTo,
+        advanceStatus: item.isAdvance ? 'pending' : null,
+      });
 
-  // Train habit engine on confirmed categorization and dynamic bank-to-account mapping
-  learnHabit({
-    memo: note,
-    payeeKey: currentParsedData?.payeeAccount,
-    categoryId,
-    bankOrApp: currentParsedData?.bank,
-    accountId,
-  });
+      await store.put('transactions', tx);
+      await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+      syncTransaction(tx).catch(console.error);
+
+      if (!item.isAdvance && item.categoryId && item.note) {
+        learnHabit({ memo: item.note, categoryId: item.categoryId });
+      }
+    }
+  } else {
+    const categoryId  = document.getElementById('slip-category').value;
+    const note        = document.getElementById('slip-note').value.trim();
+    const isAdv       = document.getElementById('slip-is-advance')?.checked;
+    const advTo       = document.getElementById('slip-advance-to')?.value.trim();
+
+    const tx = makeTransaction({
+      type: 'expense',
+      amountMinor: fullAmountMinor,
+      date,
+      accountId,
+      categoryId: isAdv ? 'cat_advance' : categoryId,
+      note,
+      isAdvance: Boolean(isAdv),
+      advanceTo: isAdv ? (advTo || 'เพื่อน') : '',
+      advanceStatus: isAdv ? 'pending' : null,
+    });
+
+    await store.put('transactions', tx);
+    await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+    syncTransaction(tx).catch(console.error);
+
+    // Train habit engine on confirmed categorization and dynamic bank-to-account mapping
+    if (!isAdv) {
+      learnHabit({
+        memo: note,
+        payeeKey: currentParsedData?.payeeAccount,
+        categoryId,
+        bankOrApp: currentParsedData?.bank,
+        accountId,
+      });
+    }
+  }
 
   updateSyncWidget('synced');
   showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว ✓`);
