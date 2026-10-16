@@ -1,9 +1,10 @@
 // ─────────────────────────────────────────────────────────────
-//  pages/accounts.js
-//  Finance Tracker v2
+//  pages/accounts.js — Accounts & Categories Management
+//  Finance Tracker v4.0 (Touch Reorder & Zero-Emoji SVG Icons)
 // ─────────────────────────────────────────────────────────────
 
 import { formatTHB } from '../format.js';
+import { renderIcon } from '../icons.js';
 
 const ORDER_KEY = 'ft_account_order';
 
@@ -40,7 +41,6 @@ export async function initAccounts(container, store, { showToast }) {
     const accountsWithBalance = await Promise.all(balancePromises);
     const sortedAccounts = sortByOrder(accountsWithBalance);
 
-    // Ensure order tracks new accounts
     const storedOrder = getAccountOrder();
     const newIds = sortedAccounts.map(a => a.id).filter(id => !storedOrder.includes(id));
     if (newIds.length) saveAccountOrder([...storedOrder, ...newIds]);
@@ -53,38 +53,53 @@ export async function initAccounts(container, store, { showToast }) {
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">บัญชี & หมวดหมู่</h1>
+        <div class="header-actions">
+          <button type="button" class="btn-primary btn-sm" id="btn-add-account">
+            ${renderIcon('plus', 14)} เพิ่มบัญชี
+          </button>
+        </div>
       </div>
 
       <div class="page-body">
-        <!-- Accounts -->
+        <!-- Accounts Section -->
         <div class="card">
           <div class="card-header">
-            <h2 class="card-title">บัญชี</h2>
-            <button class="btn-primary btn-sm" id="btn-add-account">+ เพิ่มบัญชี</button>
+            <h2 class="card-title">บัญชีทั้งหมด (${sortedAccounts.length})</h2>
           </div>
 
           ${sortedAccounts.length > 0 ? `
-            <!-- Total bar -->
+            <!-- Total balance bar -->
             <div class="accounts-total-bar">
-              <span class="accounts-total-label">ยอดรวมทั้งหมด</span>
+              <span class="accounts-total-label">ยอดรวมทุกบัญชี</span>
               <span class="accounts-total-value ${totalBalance < 0 ? 'expense' : ''}">${formatTHB(totalBalance)}</span>
             </div>
 
-            <!-- Account rows (draggable) -->
+            <!-- Account rows with Drag Handle (desktop) and Touch Reorder Buttons (mobile) -->
             <div class="account-table" id="accounts-list">
-              ${sortedAccounts.map(a => `
-                <div class="account-manage-row" draggable="true" data-account-id="${a.id}">
-                  <span class="drag-handle" title="ลาก เพื่อจัดเรียง">
+              ${sortedAccounts.map((a, idx) => `
+                <div class="account-manage-row" draggable="true" data-account-id="${a.id}" data-index="${idx}">
+                  <span class="drag-handle" title="ลากเพื่อจัดเรียง (Desktop)">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="4.5" cy="2.5" r="1"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="9.5" r="1"/><circle cx="7.5" cy="2.5" r="1"/><circle cx="7.5" cy="6" r="1"/><circle cx="7.5" cy="9.5" r="1"/></svg>
                   </span>
-                  <span class="account-icon">${a.icon || '💳'}</span>
+
+                  <!-- Mobile Touch Reorder Buttons (Zero Dead Gesture) -->
+                  <div class="touch-reorder-cluster">
+                    <button type="button" class="btn-touch-move btn-move-up" data-account-id="${a.id}" ${idx === 0 ? 'disabled' : ''} aria-label="เลื่อนขึ้น">
+                      ${renderIcon('chevron-up', 13)}
+                    </button>
+                    <button type="button" class="btn-touch-move btn-move-down" data-account-id="${a.id}" ${idx === sortedAccounts.length - 1 ? 'disabled' : ''} aria-label="เลื่อนลง">
+                      ${renderIcon('chevron-down', 13)}
+                    </button>
+                  </div>
+
+                  <span class="account-icon">${renderIcon(a.icon || 'credit-card', 17)}</span>
                   <div class="account-info">
                     <span class="account-name">${a.name}</span>
                     ${a.hidden ? '<span class="badge badge-neutral">ซ่อน</span>' : ''}
                   </div>
                   <span class="account-balance mono ${a.balance < 0 ? 'expense' : ''}">${formatTHB(a.balance)}</span>
-                  <button class="icon-btn edit-btn" data-account-id="${a.id}" title="แก้ไข">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  <button type="button" class="icon-btn edit-btn" data-account-id="${a.id}" title="แก้ไขบัญชี">
+                    ${renderIcon('edit', 14)}
                   </button>
                 </div>
               `).join('')}
@@ -92,19 +107,21 @@ export async function initAccounts(container, store, { showToast }) {
 
             ${archivedAccounts.length > 0 ? `
               <div class="archive-section" id="archive-section">
-                <button class="archive-toggle" id="archive-toggle">
+                <button type="button" class="archive-toggle" id="archive-toggle">
                   <span class="archive-toggle-arrow">▶</span>
                   บัญชีที่จัดเก็บ (${archivedAccounts.length})
                 </button>
                 <div class="archived-list" id="archived-list">
                   ${archivedAccounts.map(a => `
                     <div class="account-manage-row archived-row" data-account-id="${a.id}">
-                      <span class="account-icon">${a.icon || '💳'}</span>
+                      <span class="account-icon">${renderIcon(a.icon || 'credit-card', 17)}</span>
                       <div class="account-info">
                         <span class="account-name">${a.name}</span>
                         <span class="badge badge-neutral">จัดเก็บ</span>
                       </div>
-                      <button class="restore-btn" data-account-id="${a.id}">กู้คืน</button>
+                      <button type="button" class="btn-ghost btn-xs restore-btn" data-account-id="${a.id}">
+                        กู้คืน
+                      </button>
                     </div>
                   `).join('')}
                 </div>
@@ -118,13 +135,15 @@ export async function initAccounts(container, store, { showToast }) {
         <!-- Expense categories -->
         <div class="card">
           <div class="card-header">
-            <h2 class="card-title">หมวดรายจ่าย</h2>
-            <button class="btn-primary btn-sm" id="btn-add-expense-cat">+ เพิ่มหมวด</button>
+            <h2 class="card-title">หมวดรายจ่าย (${expenseCats.length})</h2>
+            <button type="button" class="btn-primary btn-sm" id="btn-add-expense-cat">
+              ${renderIcon('plus', 14)} เพิ่มหมวด
+            </button>
           </div>
           <div class="cat-grid">
             ${expenseCats.map(c => `
               <div class="cat-chip" data-cat-id="${c.id}">
-                <span>${c.icon || '📦'}</span>
+                <span>${renderIcon(c.icon || 'box', 15)}</span>
                 <span>${c.name}</span>
               </div>
             `).join('') || '<div class="empty-state-sm">ยังไม่มีหมวดรายจ่าย</div>'}
@@ -134,13 +153,15 @@ export async function initAccounts(container, store, { showToast }) {
         <!-- Income categories -->
         <div class="card">
           <div class="card-header">
-            <h2 class="card-title">หมวดรายรับ</h2>
-            <button class="btn-primary btn-sm" id="btn-add-income-cat">+ เพิ่มหมวด</button>
+            <h2 class="card-title">หมวดรายรับ (${incomeCats.length})</h2>
+            <button type="button" class="btn-primary btn-sm" id="btn-add-income-cat">
+              ${renderIcon('plus', 14)} เพิ่มหมวด
+            </button>
           </div>
           <div class="cat-grid">
             ${incomeCats.map(c => `
               <div class="cat-chip cat-chip-income" data-cat-id="${c.id}">
-                <span>${c.icon || '💡'}</span>
+                <span>${renderIcon(c.icon || 'sparkles', 15)}</span>
                 <span>${c.name}</span>
               </div>
             `).join('') || '<div class="empty-state-sm">ยังไม่มีหมวดรายรับ</div>'}
@@ -149,12 +170,10 @@ export async function initAccounts(container, store, { showToast }) {
       </div>
     `;
 
-    // Add account
     document.getElementById('btn-add-account')?.addEventListener('click', () => {
       window.openAccountModal?.();
     });
 
-    // Add categories
     document.getElementById('btn-add-expense-cat')?.addEventListener('click', () => {
       window.openCategoryModal?.();
     });
@@ -162,7 +181,6 @@ export async function initAccounts(container, store, { showToast }) {
       window.openCategoryModal?.();
     });
 
-    // Edit account buttons
     container.querySelectorAll('.edit-btn[data-account-id]').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
@@ -170,12 +188,43 @@ export async function initAccounts(container, store, { showToast }) {
       });
     });
 
-    // Category chips
+    // Touch reorder up/down handlers
+    container.querySelectorAll('.btn-move-up[data-account-id]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const accId = btn.dataset.accountId;
+        const currentOrder = sortedAccounts.map(a => a.id);
+        const idx = currentOrder.indexOf(accId);
+        if (idx > 0) {
+          const temp = currentOrder[idx];
+          currentOrder[idx] = currentOrder[idx - 1];
+          currentOrder[idx - 1] = temp;
+          saveAccountOrder(currentOrder);
+          render();
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-move-down[data-account-id]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const accId = btn.dataset.accountId;
+        const currentOrder = sortedAccounts.map(a => a.id);
+        const idx = currentOrder.indexOf(accId);
+        if (idx !== -1 && idx < currentOrder.length - 1) {
+          const temp = currentOrder[idx];
+          currentOrder[idx] = currentOrder[idx + 1];
+          currentOrder[idx + 1] = temp;
+          saveAccountOrder(currentOrder);
+          render();
+        }
+      });
+    });
+
     container.querySelectorAll('.cat-chip[data-cat-id]').forEach(chip => {
       chip.addEventListener('click', () => window.openCategoryModal?.(chip.dataset.catId));
     });
 
-    // Archive section toggle
     const archiveToggle = document.getElementById('archive-toggle');
     const archivedList  = document.getElementById('archived-list');
     if (archiveToggle && archivedList) {
@@ -185,7 +234,6 @@ export async function initAccounts(container, store, { showToast }) {
       });
     }
 
-    // Restore buttons
     container.querySelectorAll('.restore-btn[data-account-id]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const acc = await store.get('accounts', btn.dataset.accountId);
@@ -197,7 +245,6 @@ export async function initAccounts(container, store, { showToast }) {
       });
     });
 
-    // Drag-to-reorder active accounts
     bindDragReorder(
       document.getElementById('accounts-list'),
       '.account-manage-row[data-account-id]',
@@ -207,11 +254,7 @@ export async function initAccounts(container, store, { showToast }) {
   }
 
   await render();
-
-  return undefined;
 }
-
-// ── Drag-to-reorder ───────────────────────────────────────────
 
 function bindDragReorder(list, rowSelector, dataAttr, initialOrder) {
   if (!list) return;

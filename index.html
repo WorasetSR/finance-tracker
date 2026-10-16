@@ -7,13 +7,13 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#18181B" />
+  <meta name="theme-color" content="#09090B" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Finance" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
@@ -25,14 +25,14 @@
   <div class="setup-card">
     <div class="setup-logo">
       <svg class="setup-logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="7" style="fill:var(--primary)"/>
+        <rect width="32" height="32" rx="8" style="fill:var(--primary)"/>
         <line x1="16" y1="6" x2="16" y2="26" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
         <path d="M20 10.5C20 8 18 7 16 7C13 7 11 9 11 11.5C11 14 13 15 16 16C19 17 21 18.5 21 21C21 23.5 19 25 16 25C13.5 25 11.5 23.5 11.5 22" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
       <span class="setup-logo-text">Finance</span>
     </div>
-    <h1 class="setup-title">ตั้งค่า GitHub Sync</h1>
-    <p class="setup-subtitle">เชื่อมต่อ GitHub repository เพื่อบันทึกข้อมูลของคุณบนคลาวด์อย่างปลอดภัย</p>
+    <h1 class="setup-title">เริ่มต้นใช้งาน</h1>
+    <p class="setup-subtitle">เชื่อมต่อ Cloud Sync หรือเริ่มต้นใช้งานทันทีบนอุปกรณ์ของคุณ</p>
     <div id="setup-error" class="error-banner hidden">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -58,7 +58,7 @@
       </div>
       <button type="submit" id="setup-submit" class="btn-primary btn-full">เชื่อมต่อและเริ่มต้น</button>
     </form>
-    <button id="setup-skip" class="btn-skip">ข้ามการตั้งค่า — ใช้งานแบบ local เท่านั้น</button>
+    <button id="setup-skip" class="btn-skip">ข้ามการตั้งค่า — เข้าสู่แอปทันที</button>
   </div>
 </div>
 
@@ -69,52 +69,65 @@
   <aside id="sidebar">
     <div class="sidebar-logo">
       <svg class="sidebar-logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="7" style="fill:var(--primary)"/>
+        <rect width="32" height="32" rx="8" style="fill:var(--primary)"/>
         <line x1="16" y1="6" x2="16" y2="26" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
         <path d="M20 10.5C20 8 18 7 16 7C13 7 11 9 11 11.5C11 14 13 15 16 16C19 17 21 18.5 21 21C21 23.5 19 25 16 25C13.5 25 11.5 23.5 11.5 22" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
       <span>Finance</span>
     </div>
 
+    <div class="sidebar-quick-actions">
+      <button type="button" class="btn-primary btn-sm" id="btn-sidebar-add" style="flex:1">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        จดรายการ
+      </button>
+      <button type="button" class="btn-ghost btn-sm" id="btn-sidebar-scan" title="สแกนสลิป">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        สลิป
+      </button>
+    </div>
+
     <nav class="sidebar-nav">
       <a href="#" class="nav-link active" data-page="dashboard">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1.5"/>
           <rect x="14" y="3" width="7" height="7" rx="1.5"/>
           <rect x="14" y="14" width="7" height="7" rx="1.5"/>
           <rect x="3" y="14" width="7" height="7" rx="1.5"/>
         </svg>
-        Dashboard
+        ภาพรวม
       </a>
       <a href="#" class="nav-link" data-page="transactions">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-          <rect x="9" y="3" width="6" height="4" rx="1"/>
-          <line x1="9" y1="12" x2="15" y2="12"/>
-          <line x1="9" y1="16" x2="13" y2="16"/>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"/>
+          <line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/>
+          <line x1="3" y1="12" x2="3.01" y2="12"/>
+          <line x1="3" y1="18" x2="3.01" y2="18"/>
         </svg>
         รายการ
       </a>
       <a href="#" class="nav-link" data-page="budget">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
-          <path d="M12 8v4l3 3"/>
+          <path d="M12 6v6l4 2"/>
         </svg>
-        งบประมาณ
+        งบ & บิลประจำ
       </a>
       <a href="#" class="nav-link" data-page="analytics">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
           <polyline points="16 7 22 7 22 13"/>
         </svg>
         วิเคราะห์
       </a>
       <a href="#" class="nav-link" data-page="accounts">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-          <line x1="1" y1="10" x2="23" y2="10"/>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="5" width="20" height="14" rx="2"/>
+          <line x1="2" y1="10" x2="22" y2="10"/>
         </svg>
-        บัญชี
+        บัญชี & หมวดหมู่
       </a>
     </nav>
 
@@ -124,7 +137,7 @@
         <span class="sync-dot synced" id="sync-dot"></span>
         <span class="sync-label" id="sync-label">พร้อมใช้งาน</span>
         <button class="sync-btn" id="btn-sync">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1 4 1 10 7 10"/>
             <polyline points="23 20 23 14 17 14"/>
             <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
@@ -134,7 +147,7 @@
       </div>
 
       <a href="#" class="nav-link" data-page="settings">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
@@ -145,23 +158,27 @@
 
   <!-- TOPBAR (mobile only) -->
   <header class="topbar" id="main-topbar">
-    <span class="topbar-title" id="topbar-title">Dashboard</span>
+    <div class="topbar-left">
+      <span class="topbar-brand-dot"></span>
+      <span class="topbar-title" id="topbar-title">ภาพรวม</span>
+    </div>
     <div class="topbar-right">
-      <button class="topbar-sync-btn" id="topbar-btn-sync" aria-label="Sync">
+      <button type="button" class="topbar-pill-btn" data-page="accounts" id="topbar-btn-accounts" aria-label="บัญชีและหมวดหมู่">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="5" width="20" height="14" rx="2"/>
+          <line x1="2" y1="10" x2="22" y2="10"/>
+        </svg>
+        <span>บัญชี</span>
+      </button>
+      <button type="button" class="topbar-sync-btn" id="topbar-btn-sync" aria-label="Sync" title="ซิงค์ข้อมูล">
         <span class="sync-dot synced" id="topbar-sync-dot"></span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="1 4 1 10 7 10"/>
           <polyline points="23 20 23 14 17 14"/>
           <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
         </svg>
       </button>
-      <button class="topbar-settings-btn" id="topbar-btn-slip" aria-label="สแกนสลิป" title="สแกนสลิป">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
-        </svg>
-      </button>
-      <button class="topbar-settings-btn" id="topbar-btn-settings" aria-label="ตั้งค่า">
+      <button type="button" class="topbar-settings-btn" id="topbar-btn-settings" aria-label="ตั้งค่า" title="ตั้งค่า">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -173,10 +190,10 @@
   <!-- MAIN CONTENT (JS fills this) -->
   <main id="page-content"></main>
 
-  <!-- BOTTOM NAV (mobile) -->
-  <nav class="bottom-nav">
+  <!-- DOCKED BOTTOM NAV (mobile — no floating FABs covering content) -->
+  <nav class="bottom-nav" aria-label="เมนูหลัก">
     <a href="#" class="bnav-item active" data-page="dashboard">
-      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1.5"/>
         <rect x="14" y="3" width="7" height="7" rx="1.5"/>
         <rect x="14" y="14" width="7" height="7" rx="1.5"/>
@@ -185,30 +202,42 @@
       <span>หน้าหลัก</span>
     </a>
     <a href="#" class="bnav-item" data-page="transactions">
-      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-        <rect x="9" y="3" width="6" height="4" rx="1"/>
-        <line x1="9" y1="12" x2="15" y2="12"/>
-        <line x1="9" y1="16" x2="13" y2="16"/>
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/>
+        <line x1="3" y1="18" x2="3.01" y2="18"/>
       </svg>
       <span>รายการ</span>
     </a>
+
+    <!-- Center Docked 1-Tap Action Cluster -->
+    <div class="bnav-dock-cluster">
+      <button type="button" class="bnav-action-scan" id="btn-slip-fab" aria-label="สแกนสลิป" title="สแกนสลิปในคลิกเดียว">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </button>
+      <button type="button" class="bnav-action-add" id="btn-add-tx-fab" aria-label="จดรายการ" title="จดรายการ">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
     <a href="#" class="bnav-item" data-page="budget">
-      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
-        <path d="M12 8v4l3 3"/>
+        <path d="M12 6v6l4 2"/>
       </svg>
-      <span>งบ</span>
-    </a>
-    <a href="#" class="bnav-item" data-page="accounts">
-      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="5" width="20" height="14" rx="2"/>
-        <line x1="2" y1="10" x2="22" y2="10"/>
-      </svg>
-      <span>บัญชี</span>
+      <span>งบ & บิล</span>
     </a>
     <a href="#" class="bnav-item" data-page="analytics">
-      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="bnav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
         <polyline points="16 7 22 7 22 13"/>
       </svg>
@@ -216,97 +245,97 @@
     </a>
   </nav>
 
-  <!-- Floating buttons (mobile) -->
-  <div class="fab-group">
-    <button class="fab-float fab-slip" id="btn-slip-fab" aria-label="สแกนสลิป" title="สแกนสลิป">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-        <circle cx="12" cy="13" r="4"/>
-      </svg>
-    </button>
-    <button class="fab-float" id="btn-add-tx-fab" aria-label="เพิ่มรายการ" title="เพิ่มรายการ">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <line x1="12" y1="5" x2="12" y2="19"/>
-        <line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-    </button>
-  </div>
-
 </div>
 
-<!-- ── MODAL: ADD / EDIT TRANSACTION ────────────────────── -->
+<!-- ── MODAL: ADD / EDIT TRANSACTION (1-TAP CHIP SELECTORS) ── -->
 <div id="tx-modal" class="modal-overlay hidden">
   <div class="modal">
     <div class="modal-header">
-      <h2 id="tx-modal-title">เพิ่มรายการ</h2>
-      <button class="modal-close" data-close="tx-modal" aria-label="ปิด">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+      <h2 id="tx-modal-title">จดรายการ</h2>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button type="button" class="btn-ghost btn-xs" id="btn-tx-modal-scan-slip" title="สแกนสลิปโอนเงิน">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <span>สแกนสลิป</span>
+        </button>
+        <button class="modal-close" data-close="tx-modal" aria-label="ปิด">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="modal-body">
-      <button type="button" class="btn-ghost btn-full" id="btn-tx-modal-scan-slip" style="margin-bottom:14px;border:1px dashed var(--border);color:var(--primary);display:flex;align-items:center;justify-content:center;gap:8px">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
-        </svg>
-        <span>สแกนสลิปโอนเงิน (เลือกหลายรูปได้)</span>
-      </button>
       <!-- Type Tabs -->
       <div class="type-tabs" id="tx-type-tabs">
-        <button class="type-tab active" data-type="expense">รายจ่าย</button>
-        <button class="type-tab" data-type="income">รายรับ</button>
-        <button class="type-tab" data-type="transfer">โอน</button>
+        <button type="button" class="type-tab active" data-type="expense">รายจ่าย</button>
+        <button type="button" class="type-tab" data-type="income">รายรับ</button>
+        <button type="button" class="type-tab" data-type="transfer">โอนบัญชี</button>
       </div>
+
       <form id="tx-form" autocomplete="off">
         <input type="hidden" id="tx-id" />
-        <!-- Amount -->
-        <div class="field">
-          <label for="tx-amount">จำนวน (฿)</label>
-          <input type="number" id="tx-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
-        </div>
-        <!-- Date -->
-        <div class="field">
-          <label for="tx-date">วันที่</label>
-          <input type="date" id="tx-date" required />
-        </div>
-        <!-- Account (expense/income) -->
-        <div class="field" id="grp-account">
-          <label for="tx-account">บัญชี</label>
-          <select id="tx-account" required></select>
-        </div>
-        <!-- Transfer: From Account -->
-        <div class="field hidden" id="grp-from-account">
-          <label for="tx-from-account">จากบัญชี</label>
-          <select id="tx-from-account"></select>
-        </div>
-        <!-- Transfer: To Account -->
-        <div class="field hidden" id="grp-to-account">
-          <label for="tx-to-account">ไปบัญชี</label>
-          <select id="tx-to-account"></select>
-        </div>
-        <!-- Category (hidden for transfer) -->
-        <div class="field" id="grp-category">
-          <label for="tx-category">หมวดหมู่</label>
-          <select id="tx-category"></select>
-        </div>
-        <!-- Note -->
-        <div class="field">
-          <label for="tx-note">โน้ต</label>
-          <input type="text" id="tx-note" placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)" />
-        </div>
-        <!-- Advance Toggle (เพื่อนฝากจ่ายก่อน) -->
-        <div class="field" id="grp-advance" style="margin-top:6px">
-          <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="tx-is-advance" />
-            <span style="font-weight:600;font-size:13px">ออกให้คนอื่นก่อน (รอเก็บเงินคืน)</span>
-          </label>
-          <div id="tx-advance-details" class="hidden" style="margin-top:8px">
-            <input type="text" id="tx-advance-to" placeholder="ระบุชื่อเพื่อน หรือคนที่ฝากจ่าย (เช่น บอย, มายด์)" />
-            <span class="field-hint" style="font-size:11px;color:var(--text-muted);display:block;margin-top:4px">ระบบจะไม่นับเป็นรายจ่ายส่วนตัว และนำไปแสดงในรายการรอเก็บเงิน</span>
+
+        <!-- Hero Amount + Date Row -->
+        <div class="tx-hero-inputs">
+          <div class="field tx-hero-amount-field">
+            <label for="tx-amount">จำนวนเงิน (฿)</label>
+            <input type="number" id="tx-amount" class="mono-input tx-big-amount-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
+          </div>
+          <div class="field tx-hero-date-field">
+            <label for="tx-date">วันที่</label>
+            <input type="date" id="tx-date" required />
           </div>
         </div>
+
+        <!-- Account (1-Tap Chips + Hidden Select for compatibility) -->
+        <div class="field" id="grp-account">
+          <label for="tx-account">บัญชี</label>
+          <div id="tx-account-chips" class="quick-chip-grid"></div>
+          <select id="tx-account" class="sr-only-select" required></select>
+        </div>
+
+        <!-- Transfer: From Account -->
+        <div class="field hidden" id="grp-from-account">
+          <label for="tx-from-account">จากบัญชีต้นทาง</label>
+          <div id="tx-from-account-chips" class="quick-chip-grid"></div>
+          <select id="tx-from-account" class="sr-only-select"></select>
+        </div>
+
+        <!-- Transfer: To Account -->
+        <div class="field hidden" id="grp-to-account">
+          <label for="tx-to-account">ไปยังบัญชีปลายทาง</label>
+          <div id="tx-to-account-chips" class="quick-chip-grid"></div>
+          <select id="tx-to-account" class="sr-only-select"></select>
+        </div>
+
+        <!-- Category (1-Tap Chips + Hidden Select) -->
+        <div class="field" id="grp-category">
+          <label for="tx-category">หมวดหมู่</label>
+          <div id="tx-category-chips" class="quick-chip-grid cat-chip-selector"></div>
+          <select id="tx-category" class="sr-only-select"></select>
+        </div>
+
+        <!-- Note -->
+        <div class="field">
+          <label for="tx-note">บันทึกช่วยจำ / #แท็ก</label>
+          <input type="text" id="tx-note" placeholder="เช่น กาแฟ, ข้าวเที่ยง #งาน (ไม่บังคับ)" />
+        </div>
+
+        <!-- Advance Toggle (เพื่อนฝากจ่ายก่อน) -->
+        <div class="field" id="grp-advance" style="margin-top:4px;margin-bottom:4px">
+          <label class="advance-toggle-pill">
+            <input type="checkbox" id="tx-is-advance" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>ออกให้คนอื่นก่อน (รอเก็บเงินคืน)</span>
+          </label>
+          <div id="tx-advance-details" class="hidden" style="margin-top:8px">
+            <input type="text" id="tx-advance-to" placeholder="ระบุชื่อเพื่อนที่ฝากจ่าย (เช่น บอย, มายด์)" />
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button type="button" id="btn-delete-tx" class="btn-danger hidden">ลบรายการ</button>
           <div class="modal-actions-right">
@@ -342,28 +371,19 @@
           <input type="number" id="account-balance" class="mono-input" placeholder="0.00" value="0" step="any" data-calculator data-label="ยอดเริ่มต้น" />
         </div>
         <div class="field">
-          <label>ไอคอน</label>
-          <div class="icon-picker" id="account-icon-picker">
-            <span class="icon-opt selected" data-icon="💳">💳</span>
-            <span class="icon-opt" data-icon="🏦">🏦</span>
-            <span class="icon-opt" data-icon="💵">💵</span>
-            <span class="icon-opt" data-icon="👛">👛</span>
-            <span class="icon-opt" data-icon="📱">📱</span>
-            <span class="icon-opt" data-icon="💎">💎</span>
-            <span class="icon-opt" data-icon="🏠">🏠</span>
-            <span class="icon-opt" data-icon="💰">💰</span>
-          </div>
+          <label>สัญลักษณ์</label>
+          <div class="icon-picker" id="account-icon-picker"></div>
         </div>
         <div class="field">
           <label class="checkbox-label">
             <input type="checkbox" id="account-hidden-check" />
-            <span>ซ่อนจาก Dashboard</span>
-            <span class="field-hint">เช่น บัญชีเงินออม</span>
+            <span>ซ่อนจากหน้าหลัก</span>
+            <span class="field-hint">เช่น บัญชีเงินออมระยะยาว</span>
           </label>
         </div>
         <div class="modal-actions">
           <div style="display:flex;gap:6px">
-            <button type="button" id="btn-delete-account" class="btn-danger hidden">ลบบัญชี</button>
+            <button type="button" id="btn-delete-account" class="btn-danger hidden">ลบ</button>
             <button type="button" id="btn-archive-account" class="btn-archive hidden">จัดเก็บ</button>
           </div>
           <div class="modal-actions-right">
@@ -395,25 +415,8 @@
           <input type="text" id="category-name" placeholder="เช่น อาหาร, เดินทาง, เงินเดือน" required />
         </div>
         <div class="field">
-          <label>ไอคอน</label>
-          <div class="icon-picker" id="category-icon-picker">
-            <span class="icon-opt selected" data-icon="🍔">🍔</span>
-            <span class="icon-opt" data-icon="🚗">🚗</span>
-            <span class="icon-opt" data-icon="🛍️">🛍️</span>
-            <span class="icon-opt" data-icon="💊">💊</span>
-            <span class="icon-opt" data-icon="📦">📦</span>
-            <span class="icon-opt" data-icon="🎮">🎮</span>
-            <span class="icon-opt" data-icon="✈️">✈️</span>
-            <span class="icon-opt" data-icon="🏠">🏠</span>
-            <span class="icon-opt" data-icon="📚">📚</span>
-            <span class="icon-opt" data-icon="💡">💡</span>
-            <span class="icon-opt" data-icon="🎵">🎵</span>
-            <span class="icon-opt" data-icon="🏋️">🏋️</span>
-            <span class="icon-opt" data-icon="☕">☕</span>
-            <span class="icon-opt" data-icon="🐶">🐶</span>
-            <span class="icon-opt" data-icon="💼">💼</span>
-            <span class="icon-opt" data-icon="🎁">🎁</span>
-          </div>
+          <label>สัญลักษณ์</label>
+          <div class="icon-picker" id="category-icon-picker"></div>
         </div>
         <div class="field">
           <label>ประเภท</label>
@@ -461,8 +464,7 @@
         <div class="field">
           <label class="checkbox-label">
             <input type="checkbox" id="budget-no-month" />
-            <span>ใช้ทุกเดือน</span>
-            <span class="field-hint">งบประมาณนี้จะแสดงในทุกเดือน</span>
+            <span>ใช้เป็นงบมาตรฐานทุกเดือน</span>
           </label>
         </div>
         <div class="field" id="grp-budget-month">
@@ -470,11 +472,11 @@
           <input type="month" id="budget-month" />
         </div>
         <div class="field">
-          <label for="budget-limit">วงเงิน (฿)</label>
+          <label for="budget-limit">วงเงินงบประมาณ (฿)</label>
           <input type="number" id="budget-limit" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="วงเงิน" />
         </div>
         <div class="modal-actions">
-          <button type="button" id="btn-delete-budget" class="btn-danger hidden">ลบงบประมาณ</button>
+          <button type="button" id="btn-delete-budget" class="btn-danger hidden">ลบงบ</button>
           <div class="modal-actions-right">
             <button type="button" class="btn-ghost" data-close="budget-modal">ยกเลิก</button>
             <button type="submit" class="btn-primary">บันทึก</button>
@@ -489,7 +491,7 @@
 <div id="subscription-modal" class="modal-overlay hidden">
   <div class="modal modal-sm">
     <div class="modal-header">
-      <h2 id="subscription-modal-title">เพิ่มรายจ่ายประจำ / Subscription</h2>
+      <h2 id="subscription-modal-title">รายจ่ายประจำ / Subscription</h2>
       <button class="modal-close" data-close="subscription-modal" aria-label="ปิด">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -500,49 +502,36 @@
       <form id="subscription-form" autocomplete="off">
         <input type="hidden" id="sub-id" />
         <div class="field">
-          <label for="sub-name">ชื่อบริการ / รายการ</label>
-          <input type="text" id="sub-name" placeholder="เช่น Netflix, Spotify, ค่าเน็ต, ค่าห้อง" required />
+          <label for="sub-name">ชื่อบริการ / บิลประจำ</label>
+          <input type="text" id="sub-name" placeholder="เช่น Netflix, Spotify, ค่าเน็ต, ค่าคอนโด" required />
         </div>
-        <div class="field-row" style="display:flex;gap:12px">
-          <div class="field" style="flex:1">
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:0">
             <label for="sub-amount">จำนวนเงิน (฿)</label>
             <input type="number" id="sub-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
           </div>
-          <div class="field" style="width:110px">
-            <label for="sub-due-day">วันที่ตัดรอบ</label>
+          <div class="field" style="width:110px;flex-shrink:0">
+            <label for="sub-due-day">ตัดทุกวันที่</label>
             <input type="number" id="sub-due-day" min="1" max="31" placeholder="1-31" value="1" required />
           </div>
         </div>
-        <div class="field-row" style="display:flex;gap:12px">
-          <div class="field" style="flex:1">
-            <label for="sub-account">บัญชีที่ใช้ตัดเงิน</label>
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:0">
+            <label for="sub-account">บัญชีที่ตัดเงิน</label>
             <select id="sub-account" required></select>
           </div>
-          <div class="field" style="flex:1">
+          <div class="field" style="flex:1;min-width:0">
             <label for="sub-category">หมวดหมู่</label>
             <select id="sub-category" required></select>
           </div>
         </div>
         <div class="field">
-          <label>ไอคอน</label>
-          <div class="icon-picker" id="sub-icon-picker">
-            <span class="icon-opt selected" data-icon="🎬">🎬</span>
-            <span class="icon-opt" data-icon="🎵">🎵</span>
-            <span class="icon-opt" data-icon="📱">📱</span>
-            <span class="icon-opt" data-icon="🌐">🌐</span>
-            <span class="icon-opt" data-icon="🏠">🏠</span>
-            <span class="icon-opt" data-icon="⚡">⚡</span>
-            <span class="icon-opt" data-icon="💧">💧</span>
-            <span class="icon-opt" data-icon="🛡️">🛡️</span>
-            <span class="icon-opt" data-icon="🏋️">🏋️</span>
-            <span class="icon-opt" data-icon="☁️">☁️</span>
-            <span class="icon-opt" data-icon="📦">📦</span>
-            <span class="icon-opt" data-icon="💳">💳</span>
-          </div>
+          <label>สัญลักษณ์</label>
+          <div class="icon-picker" id="sub-icon-picker"></div>
         </div>
         <div class="field">
           <label for="sub-note">โน้ตเพิ่มเติม</label>
-          <input type="text" id="sub-note" placeholder="เช่น แฟมิลี่แชร์กับเพื่อน, บัญชีเมล..." />
+          <input type="text" id="sub-note" placeholder="เช่น แชร์กับเพื่อน, ตัดบัตร..." />
         </div>
         <div class="modal-actions">
           <button type="button" id="btn-delete-sub" class="btn-danger hidden">ลบรายการ</button>
@@ -556,13 +545,13 @@
   </div>
 </div>
 
-<!-- ── MODAL: BATCH SLIP INGESTION ────────────────────── -->
+<!-- ── MODAL: BATCH SLIP INGESTION (COMPACT MOBILE VIEW) ── -->
 <div id="slip-modal" class="modal-overlay hidden">
   <div class="modal modal-lg">
     <div class="modal-header">
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:8px">
         <h2 id="slip-modal-title">สแกนสลิปโอนเงิน</h2>
-        <span id="slip-queue-badge" class="badge badge-neutral hidden">สลิป 1/1</span>
+        <span id="slip-queue-badge" class="badge badge-neutral hidden">1/1</span>
       </div>
       <button class="modal-close" data-close="slip-modal" aria-label="ปิด">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
@@ -571,126 +560,140 @@
       </button>
     </div>
     <div class="modal-body">
+      <input type="file" id="slip-file-input" accept="image/*" multiple class="hidden" />
+
       <!-- Step 1: Upload / Dropzone -->
       <div id="slip-drop-section">
         <div class="slip-dropzone" id="slip-dropzone">
-          <input type="file" id="slip-file-input" accept="image/*" multiple class="hidden" />
           <div class="slip-drop-icon">
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
               <circle cx="12" cy="13" r="4"/>
             </svg>
           </div>
-          <div class="slip-drop-title">คลิก หรือ ลากสลิปมาวางที่นี่</div>
-          <div class="slip-drop-sub">เลือกได้หลายรูปพร้อมกัน (ระบบจะวิเคราะห์และให้ตรวจทีละใบ)</div>
+          <div class="slip-drop-title">เลือกรูปสลิปโอนเงิน</div>
+          <div class="slip-drop-sub">เลือกได้หลายรูปพร้อมกัน ระบบจะสกัดข้อมูลและจัดหมวดหมู่อัตโนมัติ</div>
           <button type="button" class="btn-primary" id="btn-browse-slips" style="margin-top:14px">เลือกรูปภาพสลิป</button>
         </div>
       </div>
 
       <!-- Step 2: Loading State -->
-      <div id="slip-loading-section" class="hidden" style="text-align:center;padding:40px 16px">
-        <div class="spinner" style="margin:0 auto 16px"></div>
-        <div id="slip-loading-text" style="font-size:16px;font-weight:600">กำลังวิเคราะห์สลิป...</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">สกัดยอดเงิน วันที่ บัญชี และบันทึกช่วยจำด้วย Gemini Vision</div>
+      <div id="slip-loading-section" class="hidden" style="text-align:center;padding:36px 16px">
+        <div class="spinner" style="margin:0 auto 14px"></div>
+        <div id="slip-loading-text" style="font-size:15px;font-weight:600">กำลังอ่านข้อมูลสลิป...</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">ประมวลผลด้วย Gemini Vision & Habit Engine</div>
       </div>
 
-      <!-- Step 3: Preview Card -->
+      <!-- Step 3: Compact Preview Card (Fits 1 Mobile Screen) -->
       <div id="slip-preview-section" class="hidden">
-        <div class="slip-preview-grid">
-          <div class="slip-thumb-container">
-            <img id="slip-thumb-img" alt="สลิปโอนเงิน" class="slip-thumb" />
+        <form id="slip-confirm-form" class="slip-form">
+          <!-- Compact Top Row: Slip Thumbnail + Type Tabs + Amount & Date -->
+          <div class="slip-compact-hero">
+            <button type="button" class="slip-thumb-compact" id="btn-zoom-slip" title="แตะเพื่อดูรูปสลิปเต็มจอ">
+              <img id="slip-thumb-img" alt="สลิปโอนเงิน" class="slip-thumb" />
+              <span class="slip-zoom-hint">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </span>
+            </button>
+
+            <div class="slip-hero-fields">
+              <div class="type-tabs type-tabs-sm" id="slip-type-tabs">
+                <button type="button" class="type-tab active" data-type="expense">รายจ่าย</button>
+                <button type="button" class="type-tab" data-type="income">รายรับ</button>
+                <button type="button" class="type-tab" data-type="transfer">โอน</button>
+              </div>
+              <div class="slip-amount-date-row">
+                <div class="slip-amt-wrap">
+                  <span class="slip-currency-prefix">฿</span>
+                  <input type="text" inputmode="decimal" id="slip-amount" class="mono slip-big-amt" required />
+                </div>
+                <input type="date" id="slip-date" class="slip-compact-date" required />
+              </div>
+            </div>
           </div>
-          <form id="slip-confirm-form" class="slip-form">
-            <!-- Type Tabs -->
-            <div class="type-tabs" id="slip-type-tabs" style="margin-bottom:12px">
-              <button type="button" class="type-tab active" data-type="expense">รายจ่าย</button>
-              <button type="button" class="type-tab" data-type="income">รายรับ</button>
-              <button type="button" class="type-tab" data-type="transfer">โอนข้ามบัญชี</button>
-            </div>
 
+          <!-- Account Selection (1-Tap Chips) -->
+          <div class="field" id="grp-slip-account">
+            <label id="lbl-slip-account">บัญชีที่จ่าย</label>
+            <div id="slip-account-chips" class="quick-chip-grid"></div>
+            <select id="slip-account" class="sr-only-select"></select>
+          </div>
+
+          <!-- Transfer: From & To Account (Hidden unless transfer) -->
+          <div class="field-row hidden" id="grp-slip-transfer">
+            <div class="field" style="flex:1;min-width:0">
+              <label>จากบัญชี</label>
+              <select id="slip-from-account"></select>
+            </div>
+            <div class="field" style="flex:1;min-width:0">
+              <label>ไปบัญชี</label>
+              <select id="slip-to-account"></select>
+            </div>
+          </div>
+
+          <!-- Single Item Section (Default) -->
+          <div id="slip-single-section">
+            <div class="field" id="grp-slip-category">
+              <label id="lbl-slip-category">หมวดหมู่</label>
+              <div id="slip-category-chips" class="quick-chip-grid cat-chip-selector"></div>
+              <select id="slip-category" class="sr-only-select"></select>
+            </div>
             <div class="field">
-              <label>จำนวนเงิน (บาท)</label>
-              <input type="text" id="slip-amount" class="mono" style="font-size:20px;font-weight:700;color:var(--expense)" required />
+              <label>บันทึกช่วยจำ</label>
+              <input type="text" id="slip-note" placeholder="โน้ตจากสลิป หรือ #แท็ก" />
             </div>
-            <div class="field-row" style="display:flex;gap:12px">
-              <div class="field" style="flex:1">
-                <label>วันที่</label>
-                <input type="date" id="slip-date" required />
-              </div>
-              <div class="field" id="grp-slip-account" style="flex:1">
-                <label id="lbl-slip-account">บัญชีที่จ่าย</label>
-                <select id="slip-account"></select>
-              </div>
-            </div>
+          </div>
 
-            <!-- Transfer: From & To Account (Hidden unless transfer) -->
-            <div class="field-row hidden" id="grp-slip-transfer" style="display:flex;gap:12px;margin-top:4px">
-              <div class="field" style="flex:1">
-                <label>จากบัญชี</label>
-                <select id="slip-from-account"></select>
-              </div>
-              <div class="field" style="flex:1">
-                <label>ไปบัญชี</label>
-                <select id="slip-to-account"></select>
-              </div>
-            </div>
+          <!-- Quick Action Toggles Row (Advance & Split) -->
+          <div id="grp-slip-split-toggle" class="slip-mode-bar">
+            <label class="advance-toggle-pill" id="grp-slip-advance">
+              <input type="checkbox" id="slip-is-advance" />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>ออกให้เพื่อนก่อน</span>
+            </label>
+            <button type="button" class="btn-ghost btn-xs" id="btn-toggle-split">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg>
+              <span>แยกหลายหมวด</span>
+            </button>
+          </div>
 
-            <!-- Split Mode Toggle -->
-            <div id="grp-slip-split-toggle" style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px">
-              <span style="font-size:12px;color:var(--text-muted)">แบ่งหลายหมวด / มีคนฝากจ่าย?</span>
-              <button type="button" class="btn-ghost btn-sm" id="btn-toggle-split" style="font-size:12px;padding:4px 10px;border:1px solid var(--border)">
-                ➗ แยกหลายรายการ
+          <div id="slip-advance-details" class="hidden" style="margin-bottom:10px">
+            <input type="text" id="slip-advance-to" placeholder="ระบุชื่อเพื่อนที่ฝากจ่าย (เช่น บอย)" />
+          </div>
+
+          <!-- Split Items Section (Shown when user clicks Split) -->
+          <div id="slip-split-section" class="hidden">
+            <div id="split-countdown-banner" class="split-banner pending">
+              <span>คงเหลือต้องจัดสรร:</span>
+              <span id="split-remaining-val" class="mono" style="font-size:14px;font-weight:700">0.00 ฿</span>
+            </div>
+            <div id="split-items-container" class="split-items-container"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button type="button" class="btn-ghost btn-xs" id="btn-add-split-item" style="flex:1;border:1px dashed var(--border)">
+                + เพิ่มรายการย่อย
+              </button>
+              <button type="button" class="btn-ghost btn-xs" id="btn-fill-remaining" style="border:1px solid var(--border)" title="นำยอดคงเหลือไปใส่ในรายการล่าสุด">
+                เติมยอดคงเหลือ
               </button>
             </div>
+          </div>
 
-            <!-- Single Item Section (Default) -->
-            <div id="slip-single-section">
-              <div class="field" id="grp-slip-category">
-                <label id="lbl-slip-category">หมวดหมู่ (จัดให้อัตโนมัติจาก Habit Engine)</label>
-                <select id="slip-category"></select>
-              </div>
-              <div class="field">
-                <label>บันทึกช่วยจำ (Memo จากสลิป)</label>
-                <input type="text" id="slip-note" placeholder="โน้ตช่วยจำ" />
-              </div>
-              <div class="field" id="grp-slip-advance" style="margin-top:6px">
-                <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                  <input type="checkbox" id="slip-is-advance" />
-                  <span style="font-size:13px;font-weight:600">ออกให้คนอื่นก่อนทั้งบิล (รอเก็บเงินคืน)</span>
-                </label>
-                <div id="slip-advance-details" class="hidden" style="margin-top:8px">
-                  <input type="text" id="slip-advance-to" placeholder="ระบุชื่อเพื่อน หรือคนที่ฝากจ่าย (เช่น บอย)" />
-                </div>
-              </div>
-            </div>
-
-            <!-- Split Items Section (Shown when user clicks Split) -->
-            <div id="slip-split-section" class="hidden">
-              <div id="split-countdown-banner" class="split-banner pending">
-                <span>คงเหลือต้องจัดสรร:</span>
-                <span id="split-remaining-val" class="mono" style="font-size:15px;font-weight:700">0.00 ฿</span>
-              </div>
-              <div id="split-items-container" class="split-items-container">
-                <!-- Dynamically populated sub-item rows -->
-              </div>
-              <div style="display:flex;gap:8px;margin-top:10px">
-                <button type="button" class="btn-ghost btn-sm" id="btn-add-split-item" style="flex:1;border:1px dashed var(--border)">
-                  + เพิ่มรายการย่อย
-                </button>
-                <button type="button" class="btn-ghost btn-sm" id="btn-fill-remaining" style="border:1px solid var(--border)" title="นำยอดคงเหลือที่เหลืออยู่ไปใส่ในรายการล่าสุด">
-                  ⚡ เติมยอดคงเหลือ
-                </button>
-              </div>
-            </div>
-            <div class="modal-actions" style="margin-top:18px">
-              <button type="button" class="btn-ghost" id="btn-slip-skip">ข้ามใบนี้</button>
-              <button type="submit" class="btn-primary" id="btn-slip-save">บันทึก & ถัดไป ✓</button>
-            </div>
-          </form>
-        </div>
+          <div class="modal-actions slip-sticky-actions">
+            <button type="button" class="btn-ghost" id="btn-slip-skip">ข้ามใบนี้</button>
+            <button type="submit" class="btn-primary" id="btn-slip-save">บันทึก & ถัดไป</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
+</div>
+
+<!-- ── SLIP FULLSCREEN LIGHTBOX ──────────────────────────── -->
+<div id="slip-lightbox" class="slip-lightbox hidden">
+  <button type="button" class="slip-lightbox-close" id="btn-close-lightbox" aria-label="ปิดรูปสลิป">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <img id="slip-lightbox-img" alt="สลิปโอนเงินขนาดเต็ม" />
 </div>
 
 <!-- ── MODAL: CONFIRM ────────────────────────────────────── -->

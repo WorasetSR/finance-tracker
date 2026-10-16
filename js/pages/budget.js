@@ -1,15 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 //  pages/budget.js — Budgets & Subscriptions (Recurring Bills)
-//  Finance Tracker v2
+//  Finance Tracker v4.0 (Zero-Emoji SVG Icons)
 // ─────────────────────────────────────────────────────────────
 
 import { formatTHB, formatMonth } from '../format.js';
 import { currentMonth } from '../schema.js';
 import { getSubscriptions, getUpcomingBills, paySubscription } from '../subscriptions.js';
+import { renderIcon } from '../icons.js';
 
-export async function initBudget(container, store, { showToast }) {
+export async function initBudget(container, store, { showToast, tab = 'budget' }) {
   let month = currentMonth();
-  let activeTab = 'budget'; // 'budget' | 'subscriptions'
+  let activeTab = tab || 'budget'; // 'budget' | 'subscriptions'
 
   async function render() {
     const [budgets, templates, txs, categories, accounts] = await Promise.all([
@@ -28,7 +29,6 @@ export async function initBudget(container, store, { showToast }) {
       spendMap[tx.categoryId] = (spendMap[tx.categoryId] || 0) + tx.amountMinor;
     }
 
-    // Monthly budgets
     const budgetItems = budgets.map(b => {
       const spent     = spendMap[b.categoryId] || 0;
       const pct       = b.limitMinor > 0 ? Math.round((spent / b.limitMinor) * 100) : 0;
@@ -39,7 +39,6 @@ export async function initBudget(container, store, { showToast }) {
       return { b, cat, spent, pct, remaining, over, near, isTemplate: false };
     });
 
-    // Template items that have no monthly override for this month
     const budgetedCatIds = new Set(budgets.map(b => b.categoryId));
     const templateItems = templates
       .filter(t => !budgetedCatIds.has(t.categoryId))
@@ -55,7 +54,6 @@ export async function initBudget(container, store, { showToast }) {
 
     const allItems = [...budgetItems, ...templateItems];
 
-    // Unbudgeted categories with spending
     const allBudgetedCatIds = new Set(allItems.map(i => i.b.categoryId));
     const unbudgeted = Object.entries(spendMap)
       .filter(([catId]) => !allBudgetedCatIds.has(catId))
@@ -66,7 +64,6 @@ export async function initBudget(container, store, { showToast }) {
     const totalSpent  = allItems.reduce((s, i) => s + i.spent, 0);
     const totalPct    = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
-    // Subscriptions data
     const upcomingBills = getUpcomingBills(31);
     const allSubs = getSubscriptions();
     const totalSubMinor = allSubs.reduce((s, sub) => s + sub.amountMinor, 0);
@@ -74,38 +71,43 @@ export async function initBudget(container, store, { showToast }) {
 
     container.innerHTML = `
       <div class="page-header">
-        <h1 class="page-title">${formatMonth(month)}</h1>
+        <div class="month-nav">
+          <button class="icon-btn" id="prev-month" title="เดือนก่อน">
+            ${renderIcon('chevron-left', 16)}
+          </button>
+          <h1 class="page-title" style="min-width:120px;text-align:center">${formatMonth(month)}</h1>
+          <button class="icon-btn" id="next-month" title="เดือนถัดไป">
+            ${renderIcon('chevron-right', 16)}
+          </button>
+        </div>
         <div class="header-actions">
           <div class="view-mode-toggle">
-            <button type="button" class="view-mode-btn ${activeTab === 'budget' ? 'active' : ''}" data-tab="budget">📊 งบประมาณ</button>
-            <button type="button" class="view-mode-btn ${activeTab === 'subscriptions' ? 'active' : ''}" data-tab="subscriptions">🔄 รายจ่ายประจำ</button>
+            <button type="button" class="view-mode-btn ${activeTab === 'budget' ? 'active' : ''}" data-tab="budget">
+              ${renderIcon('pie-chart', 14)} งบประมาณ
+            </button>
+            <button type="button" class="view-mode-btn ${activeTab === 'subscriptions' ? 'active' : ''}" data-tab="subscriptions">
+              ${renderIcon('repeat', 14)} บิลประจำ
+            </button>
           </div>
-          <button class="icon-btn" id="prev-month" title="เดือนก่อน">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-          <button class="icon-btn" id="next-month" title="เดือนถัดไป">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
           ${activeTab === 'budget' ? `
-            <button class="btn-primary" id="btn-add-budget">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              ตั้งงบ
+            <button class="btn-primary btn-sm" id="btn-add-budget">
+              ${renderIcon('plus', 14)} ตั้งงบ
             </button>
           ` : `
-            <button class="btn-primary" id="btn-add-sub">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              เพิ่มบิลประจำ
+            <button class="btn-primary btn-sm" id="btn-add-sub">
+              ${renderIcon('plus', 14)} เพิ่มบิล
             </button>
           `}
         </div>
       </div>
 
       <div class="page-body">
-        ${activeTab === 'budget' ? renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgeted, templates, catMap) : renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubsCount, catMap, accMap)}
+        ${activeTab === 'budget'
+          ? renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgeted, templates)
+          : renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubsCount, catMap, accMap)}
       </div>
     `;
 
-    // Events
     document.getElementById('prev-month')?.addEventListener('click', () => { month = offsetMonth(month, -1); render(); });
     document.getElementById('next-month')?.addEventListener('click', () => { month = offsetMonth(month, 1); render(); });
 
@@ -121,12 +123,27 @@ export async function initBudget(container, store, { showToast }) {
     document.getElementById('btn-add-sub')?.addEventListener('click', () => window.openSubscriptionModal?.());
     document.getElementById('btn-add-sub-empty')?.addEventListener('click', () => window.openSubscriptionModal?.());
 
-    // Click budget row
+    // Click budget row -> edit modal
     container.querySelectorAll('.budget-row[data-budget-id]').forEach(row => {
       row.addEventListener('click', () => openBudgetModal(row.dataset.budgetId));
     });
 
-    // Subscriptions actions
+    // Click unbudgeted row -> open budget modal pre-selecting this category! (Zero Dead Buttons)
+    container.querySelectorAll('.budget-row.unbudgeted[data-unbudgeted-cat-id]').forEach(row => {
+      row.addEventListener('click', () => {
+        const catId = row.dataset.unbudgetedCatId;
+        openBudgetModal(null, month, catId);
+      });
+    });
+
+    // Subscriptions actions: clicking card or edit button opens subscription modal
+    container.querySelectorAll('.sub-item-card[data-sub-id]').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-pay-sub-budget')) return;
+        window.openSubscriptionModal?.(card.dataset.subId);
+      });
+    });
+
     container.querySelectorAll('.btn-edit-sub').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -140,7 +157,7 @@ export async function initBudget(container, store, { showToast }) {
         const subId = btn.dataset.subId;
         try {
           await paySubscription(subId, store);
-          showToast('บันทึกการชำระบิลเรียบร้อยแล้ว ✓');
+          showToast('บันทึกการชำระบิลเรียบร้อยแล้ว');
           render();
         } catch (err) {
           showToast(err.message, 'error');
@@ -175,7 +192,7 @@ export async function initBudget(container, store, { showToast }) {
         await store.put('budgets', makeBudget({ month, categoryId: t.categoryId, limitMinor: t.limitMinor }));
         count++;
       }
-      if (count > 0) { showToast(`ใช้ Template ${count} หมวดสำเร็จ`); render(); }
+      if (count > 0) { showToast(`ใช้มาตรฐาน ${count} หมวดสำเร็จ`); render(); }
       else showToast('มีงบครบทุกหมวดแล้ว');
     });
   }
@@ -185,7 +202,7 @@ export async function initBudget(container, store, { showToast }) {
 
 // ── Render Sub-Views ──────────────────────────────────────────
 
-function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgeted, templates, catMap) {
+function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgeted, templates) {
   return `
     ${totalBudget > 0 ? `
       <div class="card budget-overview">
@@ -220,7 +237,7 @@ function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgete
             <div class="budget-row ${isTemplate ? 'is-template' : ''}" data-budget-id="${b.id}" data-is-template="${isTemplate}">
               <div class="budget-row-header">
                 <div class="budget-cat">
-                  <span class="budget-icon">${cat?.icon || '📦'}</span>
+                  <span class="budget-icon">${renderIcon(cat?.icon || 'box', 16)}</span>
                   <span class="budget-name">${cat?.name || 'ไม่ระบุ'}</span>
                   ${isTemplate ? '<span class="template-badge">ทุกเดือน</span>' : ''}
                   ${over ? '<span class="badge badge-danger">เกินงบ</span>' : near ? '<span class="badge badge-warning">ใกล้เกิน</span>' : ''}
@@ -243,9 +260,9 @@ function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgete
       </div>
     ` : `
       <div class="empty-state">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="color:var(--text-muted)"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        ${renderIcon('pie-chart', 36)}
         <p>ยังไม่ได้ตั้งงบประมาณ</p>
-        <button class="btn-primary" id="btn-add-budget-empty">ตั้งงบประมาณแรก</button>
+        <button class="btn-primary btn-sm" id="btn-add-budget-empty">ตั้งงบประมาณแรก</button>
       </div>
     `}
 
@@ -253,15 +270,17 @@ function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgete
     ${unbudgeted.length > 0 ? `
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">ใช้จ่ายโดยไม่ตั้งงบ</h2>
+          <h2 class="card-title">ใช้จ่ายโดยไม่ตั้งงบ (${unbudgeted.length})</h2>
+          <span class="card-subtitle" style="font-size:11.5px;color:var(--text-muted)">แตะเพื่อตั้งงบหมวดนี้ทันที</span>
         </div>
         <div class="budget-list">
           ${unbudgeted.map(({ cat, spent }) => `
-            <div class="budget-row unbudgeted">
+            <div class="budget-row unbudgeted" data-unbudgeted-cat-id="${cat.id}" title="แตะเพื่อตั้งงบประมาณหมวด ${cat.name}">
               <div class="budget-row-header">
                 <div class="budget-cat">
-                  <span class="budget-icon">${cat?.icon || '📦'}</span>
+                  <span class="budget-icon">${renderIcon(cat?.icon || 'box', 16)}</span>
                   <span class="budget-name">${cat?.name || 'ไม่ระบุ'}</span>
+                  <span class="badge badge-neutral" style="font-size:10px">+ ตั้งงบ</span>
                 </div>
                 <span class="mono expense">${formatTHB(spent)}</span>
               </div>
@@ -275,8 +294,7 @@ function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgete
     ${templates.length > 0 ? `
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">งบทุกเดือน</h2>
-          <span class="card-subtitle">ใช้ทุกเดือนเมื่อไม่มีงบเฉพาะ</span>
+          <h2 class="card-title">งบมาตรฐานทุกเดือน</h2>
         </div>
         <div class="budget-list">
           ${templates.map(t => {
@@ -285,7 +303,7 @@ function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgete
               <div class="budget-row" data-budget-id="${t.id}" data-is-template="true">
                 <div class="budget-row-header">
                   <div class="budget-cat">
-                    <span class="budget-icon">${cat?.icon || '📦'}</span>
+                    <span class="budget-icon">${renderIcon(cat?.icon || 'box', 16)}</span>
                     <span class="budget-name">${cat?.name || 'ไม่ระบุ'}</span>
                     <span class="template-badge">ทุกเดือน</span>
                   </div>
@@ -301,11 +319,11 @@ function renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgete
     <!-- Tools -->
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">เครื่องมือ</h2>
+        <h2 class="card-title">เครื่องมือจัดการงบ</h2>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-ghost" id="btn-copy-last-month">คัดลอกงบจากเดือนที่แล้ว</button>
-        ${templates.length > 0 ? `<button class="btn-ghost" id="btn-apply-templates">ใช้ Template เดือนนี้</button>` : ''}
+        <button type="button" class="btn-ghost btn-sm" id="btn-copy-last-month">คัดลอกงบจากเดือนที่แล้ว</button>
+        ${templates.length > 0 ? `<button type="button" class="btn-ghost btn-sm" id="btn-apply-templates">ใช้มาตรฐานเดือนนี้</button>` : ''}
       </div>
     </div>
   `;
@@ -315,15 +333,14 @@ function renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubs
   if (!allSubs.length) {
     return `
       <div class="empty-state">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="color:var(--text-muted)"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        ${renderIcon('bell', 36)}
         <p>ยังไม่มีรายการรายจ่ายประจำหรือ Subscriptions</p>
-        <button class="btn-primary" id="btn-add-sub-empty">+ เพิ่มรายจ่ายประจำรายการแรก</button>
+        <button class="btn-primary btn-sm" id="btn-add-sub-empty">+ เพิ่มบิลประจำรายการแรก</button>
       </div>
     `;
   }
 
   return `
-    <!-- Subscriptions Overview Summary -->
     <div class="card budget-overview">
       <div class="budget-overview-header">
         <div>
@@ -332,17 +349,16 @@ function renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubs
         </div>
         <div style="text-align:right">
           <div class="stat-label">สถานะรอบบิลเดือนนี้</div>
-          <div style="font-size:15px;font-weight:700;margin-top:4px">
+          <div style="font-size:14px;font-weight:700;margin-top:4px">
             <span style="color:var(--income)">จ่ายแล้ว ${paidSubsCount}</span> / ${allSubs.length} บิล
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Subscriptions Cards List -->
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">รายการรายจ่ายประจำ & Subscriptions (${allSubs.length})</h2>
+        <h2 class="card-title">รายการรายจ่ายประจำ (${allSubs.length})</h2>
       </div>
       <div class="subs-list">
         ${upcomingBills.map(b => {
@@ -353,7 +369,7 @@ function renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubs
           return `
             <div class="sub-item-card" data-sub-id="${sub.id}">
               <div class="sub-left">
-                <span class="sub-icon">${sub.icon || '🎬'}</span>
+                <span class="sub-icon">${renderIcon(sub.icon || 'tv', 17)}</span>
                 <div class="sub-details">
                   <span class="sub-name">
                     ${sub.name}
@@ -366,15 +382,15 @@ function renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubs
                 </div>
               </div>
               <div class="sub-right">
-                <span class="mono" style="font-weight:700;font-size:15px">${formatTHB(sub.amountMinor)}</span>
+                <span class="mono" style="font-weight:700;font-size:14px">${formatTHB(sub.amountMinor)}</span>
                 <div style="display:flex;gap:6px">
                   ${!b.isPaid ? `
-                    <button type="button" class="btn-primary btn-sm btn-pay-sub-budget" data-sub-id="${sub.id}" style="padding:4px 10px;font-size:12px">
-                      ✓ จ่ายแล้ว
+                    <button type="button" class="btn-primary btn-xs btn-pay-sub-budget" data-sub-id="${sub.id}">
+                      ${renderIcon('check', 12)} ชำระ
                     </button>
                   ` : ''}
-                  <button type="button" class="btn-ghost btn-sm btn-edit-sub" data-sub-id="${sub.id}" style="padding:4px 8px;font-size:12px;border:1px solid var(--border)">
-                    ✏️ แก้ไข
+                  <button type="button" class="btn-ghost btn-xs btn-edit-sub" data-sub-id="${sub.id}">
+                    แก้ไข
                   </button>
                 </div>
               </div>
@@ -394,6 +410,6 @@ function offsetMonth(monthStr, delta) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function openBudgetModal(id, month) {
-  window.openBudgetModal?.(id, month);
+function openBudgetModal(id, month, prefillCategoryId = null) {
+  window.openBudgetModal?.(id, month, prefillCategoryId);
 }

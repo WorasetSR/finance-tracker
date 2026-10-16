@@ -86,10 +86,10 @@ export function getUpcomingBills(withinDays = 14) {
 
     if (isPaid) {
       urgency = 'paid';
-      label = 'จ่ายแล้ว ✓';
+      label = 'จ่ายแล้ว';
     } else if (diffDays === 0) {
       urgency = 'due_today';
-      label = 'ครบกำหนดวันนี้!';
+      label = 'ครบกำหนดวันนี้';
     } else if (diffDays < 0) {
       urgency = 'overdue';
       label = `เลยกำหนด ${Math.abs(diffDays)} วัน`;

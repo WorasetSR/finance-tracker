@@ -1,17 +1,18 @@
 // ─────────────────────────────────────────────────────────────
-//  pages/dashboard.js
-//  Finance Tracker v2
+//  pages/dashboard.js — Compact Mobile-First Dashboard
+//  Finance Tracker v4.0 (Zero-Emoji SVG Icons)
 // ─────────────────────────────────────────────────────────────
 
 import { formatTHB, formatMonth, formatDateRelative } from '../format.js';
 import { currentMonth, makeTransaction, todayStr } from '../schema.js';
 import { syncTransaction } from '../supabase-client.js';
 import { getUpcomingBills, paySubscription } from '../subscriptions.js';
+import { renderIcon } from '../icons.js';
 
 let chartInstance = null;
 
-const ORDER_KEY     = 'ft_account_order';
-const SUM_SEL_KEY   = 'ft_sum_selection';
+const ORDER_KEY   = 'ft_account_order';
+const SUM_SEL_KEY = 'ft_sum_selection';
 
 function getAccountOrder() {
   try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]'); } catch { return []; }
@@ -39,8 +40,10 @@ function sortByOrder(accounts) {
   });
 }
 
-export async function initDashboard(container, store, { openTxModal, showToast, showConfirm }) {
+export async function initDashboard(container, store, { openTxModal, showToast, showConfirm, navigate }) {
   let month = currentMonth();
+  let receivablesExpanded = false;
+  let billsExpanded = false;
 
   async function render() {
     const [summary, accounts, txs, categories, pendingAdvances] = await Promise.all([
@@ -55,22 +58,18 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
     const accountsWithBalance = await Promise.all(balancePromises);
     const visibleAccounts = sortByOrder(accountsWithBalance.filter(a => !a.hidden));
 
-    // Ensure order is initialised for any new accounts
     const storedOrder = getAccountOrder();
     const allIds = accountsWithBalance.map(a => a.id);
     const newIds = allIds.filter(id => !storedOrder.includes(id));
     if (newIds.length) saveAccountOrder([...storedOrder, ...newIds]);
 
-    // Sum selection state (default: all selected)
     const sel = getSumSelection();
     visibleAccounts.forEach(a => { if (!(a.id in sel)) sel[a.id] = true; });
 
     const selectedSum = visibleAccounts
       .filter(a => sel[a.id] !== false)
       .reduce((s, a) => s + a.balance, 0);
-    const allSelected = visibleAccounts.every(a => sel[a.id] !== false);
 
-    // Category spending breakdown
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const catTotals = {};
     for (const tx of txs) {
@@ -84,6 +83,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
 
     const recent = txs.slice(0, 8);
     const upcomingBills = getUpcomingBills(14);
+    const unpaidBills = upcomingBills.filter(b => !b.isPaid);
 
     const savingRate = summary.income > 0
       ? Math.round((summary.net / summary.income) * 100)
@@ -91,70 +91,193 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
 
     container.innerHTML = `
       <div class="page-header">
-        <h1 class="page-title">${formatMonth(month)}</h1>
         <div class="month-nav">
-          <button class="icon-btn" id="prev-month" title="เดือนก่อน">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          <button class="icon-btn" id="prev-month" title="เดือนก่อน" aria-label="เดือนก่อน">
+            ${renderIcon('chevron-left', 16)}
           </button>
-          <button class="icon-btn" id="next-month" title="เดือนถัดไป">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <h1 class="page-title" style="min-width:120px;text-align:center">${formatMonth(month)}</h1>
+          <button class="icon-btn" id="next-month" title="เดือนถัดไป" aria-label="เดือนถัดไป">
+            ${renderIcon('chevron-right', 16)}
           </button>
         </div>
+        <button type="button" class="link-btn" data-page="analytics">
+          วิเคราะห์ละเอียด →
+        </button>
       </div>
 
       <div class="page-body">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <span class="stat-label">รายรับ</span>
-            <span class="stat-value income">${formatTHB(summary.income)}</span>
+        <!-- Hero Net Summary Card -->
+        <div class="hero-summary-card">
+          <div class="hero-top-row">
+            <div>
+              <div class="hero-net-label">คงเหลือสุทธิเดือนนี้</div>
+              <div class="hero-net-value ${summary.net >= 0 ? 'income' : 'expense'}">
+                ${summary.net < 0 ? '-' : ''}${formatTHB(Math.abs(summary.net))}
+              </div>
+            </div>
+            <span class="hero-saving-pill">
+              อัตราออม ${savingRate}%
+            </span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">รายจ่าย</span>
-            <span class="stat-value expense">${formatTHB(summary.expense)}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">คงเหลือ</span>
-            <span class="stat-value ${summary.net >= 0 ? 'income' : 'expense'}">${formatTHB(Math.abs(summary.net))}</span>
-            <span class="stat-sub">${summary.net >= 0 ? '▲ บวก' : '▼ ลบ'}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">อัตราออม</span>
-            <span class="stat-value ${savingRate >= 0 ? 'income' : 'expense'}">${savingRate}%</span>
-            <span class="stat-sub">จากรายรับทั้งหมด</span>
+          <div class="hero-metrics-row">
+            <div class="hero-metric-box">
+              <span class="hero-metric-lbl">รายรับเดือนนี้</span>
+              <span class="hero-metric-val income">+${formatTHB(summary.income)}</span>
+            </div>
+            <div class="hero-metric-box">
+              <span class="hero-metric-lbl">รายจ่ายเดือนนี้</span>
+              <span class="hero-metric-val expense">-${formatTHB(summary.expense)}</span>
+            </div>
           </div>
         </div>
 
+        <!-- Horizontal Account Strip (1-Tap Sum Toggle) -->
+        <div class="accounts-strip-wrap">
+          <div class="accounts-strip-header">
+            <span class="accounts-strip-title">
+              บัญชี · รวมที่เลือก <strong class="mono" id="dash-sum-value" style="color:var(--text)">${formatTHB(selectedSum)}</strong>
+            </span>
+            <button type="button" class="link-btn" data-page="accounts">จัดการบัญชี →</button>
+          </div>
+          ${visibleAccounts.length > 0 ? `
+            <div class="accounts-horizontal-scroll" id="dash-account-list">
+              ${visibleAccounts.map(a => {
+                const isIncluded = sel[a.id] !== false;
+                return `
+                  <div class="acc-mini-card ${isIncluded ? '' : 'excluded'}" data-account-id="${a.id}" title="แตะเพื่อรวม/แยกจากยอดรวม">
+                    <div class="acc-mini-top">
+                      <span class="acc-mini-icon">${renderIcon(a.icon || 'credit-card', 15)}</span>
+                      <span class="acc-mini-check">${isIncluded ? renderIcon('check', 11) : ''}</span>
+                    </div>
+                    <div class="acc-mini-name">${a.name}</div>
+                    <div class="acc-mini-bal ${a.balance < 0 ? 'expense' : ''}">${formatTHB(a.balance)}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : '<div class="empty-state-sm">ยังไม่มีบัญชี</div>'}
+        </div>
+
+        <!-- Collapsible Alert Banner: Pending Receivables -->
+        ${pendingAdvances && pendingAdvances.length > 0 ? `
+          <div class="compact-banner ${receivablesExpanded ? 'open' : ''}" id="card-receivables">
+            <div class="compact-banner-header" id="toggle-receivables">
+              <div class="compact-banner-left">
+                <span class="compact-banner-icon warn">${renderIcon('users', 16)}</span>
+                <span class="compact-banner-title">ยอดรอเพื่อนเคลียร์ (${pendingAdvances.length})</span>
+              </div>
+              <div class="compact-banner-right">
+                <span class="mono" style="font-size:13px;font-weight:700;color:var(--warning)">
+                  ${formatTHB(pendingAdvances.reduce((s, a) => s + a.amountMinor, 0))}
+                </span>
+                <span class="compact-banner-chevron">${renderIcon('chevron-down', 16)}</span>
+              </div>
+            </div>
+            <div class="compact-banner-body">
+              <div class="receivables-container">
+                ${pendingAdvances.map(adv => `
+                  <div class="receivable-row" data-adv-id="${adv.id}">
+                    <div class="receivable-left">
+                      <span class="receivable-name">
+                        <span class="badge-advance">รอคืน</span>
+                        <strong>${adv.advanceTo || 'เพื่อน'}</strong>
+                      </span>
+                      <span class="receivable-meta">${formatDateRelative(adv.date)}${adv.note ? ' · ' + adv.note : ''}</span>
+                    </div>
+                    <div class="receivable-right">
+                      <span class="mono" style="font-weight:700;color:var(--warning)">${formatTHB(adv.amountMinor)}</span>
+                      <button type="button" class="btn-primary btn-xs btn-settle-adv" data-adv-id="${adv.id}">
+                        ${renderIcon('check', 12)} คืนแล้ว
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Collapsible Alert Banner: Upcoming Subscriptions -->
+        ${upcomingBills && upcomingBills.length > 0 ? `
+          <div class="compact-banner ${billsExpanded || unpaidBills.some(b => b.urgency === 'overdue' || b.urgency === 'due_today') ? 'open' : ''}" id="card-subscriptions">
+            <div class="compact-banner-header" id="toggle-subscriptions">
+              <div class="compact-banner-left">
+                <span class="compact-banner-icon info">${renderIcon('bell', 16)}</span>
+                <span class="compact-banner-title">รอบบิลประจำ (${unpaidBills.length} รอจ่าย)</span>
+              </div>
+              <div class="compact-banner-right">
+                <button type="button" class="link-btn" id="btn-go-subs" data-page="budget" data-tab="subscriptions">จัดการบิล →</button>
+                <span class="compact-banner-chevron">${renderIcon('chevron-down', 16)}</span>
+              </div>
+            </div>
+            <div class="compact-banner-body">
+              <div class="subs-list">
+                ${upcomingBills.slice(0, 4).map(b => `
+                  <div class="sub-item-card" data-sub-id="${b.sub.id}">
+                    <div class="sub-left">
+                      <span class="sub-icon">${renderIcon(b.sub.icon || 'tv', 17)}</span>
+                      <div class="sub-details">
+                        <span class="sub-name">
+                          ${b.sub.name}
+                          <span class="sub-urgency-badge ${b.urgency}">${b.label}</span>
+                        </span>
+                        <span class="sub-meta">ตัดทุกวันที่ ${b.dueDay} ของเดือน</span>
+                      </div>
+                    </div>
+                    <div class="sub-right">
+                      <span class="mono" style="font-weight:700">${formatTHB(b.sub.amountMinor)}</span>
+                      ${!b.isPaid ? `
+                        <button type="button" class="btn-primary btn-xs btn-pay-sub" data-sub-id="${b.sub.id}">
+                          ${renderIcon('check', 12)} ชำระ
+                        </button>
+                      ` : `
+                        <span style="font-size:11.5px;color:var(--income);font-weight:600">จ่ายแล้ว</span>
+                      `}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="dashboard-grid">
-          <!-- Account balances with checkboxes and reorder -->
+          <!-- Recent transactions -->
           <div class="card">
             <div class="card-header">
-              <h2 class="card-title">บัญชี</h2>
+              <h2 class="card-title">รายการล่าสุด</h2>
+              <button class="link-btn" data-page="transactions">ดูทั้งหมด →</button>
             </div>
-            <div class="account-list" id="dash-account-list">
-              ${visibleAccounts.length > 0 ? visibleAccounts.map(a => `
-                <div class="account-row" draggable="true" data-account-id="${a.id}">
-                  <span class="drag-handle" title="ลาก เพื่อจัดเรียง">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="4.5" cy="2.5" r="1"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="9.5" r="1"/><circle cx="7.5" cy="2.5" r="1"/><circle cx="7.5" cy="6" r="1"/><circle cx="7.5" cy="9.5" r="1"/></svg>
-                  </span>
-                  <input type="checkbox" class="account-check" data-acc-id="${a.id}" ${sel[a.id] !== false ? 'checked' : ''} title="รวมใน sum">
-                  <span class="account-icon">${a.icon || '💳'}</span>
-                  <span class="account-name">${a.name}</span>
-                  <span class="account-balance mono ${a.balance < 0 ? 'expense' : ''}">${formatTHB(a.balance)}</span>
-                </div>
-              `).join('') : '<div class="empty-state-sm">ยังไม่มีบัญชี</div>'}
-            </div>
-            ${visibleAccounts.length > 0 ? `
-              <div class="account-sum-row">
-                <span class="account-sum-label">รวมที่เลือก</span>
-                <span class="account-sum-value" id="dash-sum-value">${formatTHB(selectedSum)}</span>
+            ${recent.length > 0 ? `
+              <div class="tx-list">
+                ${recent.map(tx => {
+                  const cat = catMap[tx.categoryId];
+                  const fallbackIcon = tx.type === 'transfer' ? 'arrow-left-right' : (tx.type === 'income' ? 'coins' : 'arrow-up-right');
+                  return `
+                    <div class="tx-row" data-tx-id="${tx.id}">
+                      <span class="tx-icon">${renderIcon(cat?.icon || fallbackIcon, 17)}</span>
+                      <div class="tx-info">
+                        <span class="tx-name">
+                          ${cat?.name || (tx.type === 'transfer' ? 'โอนเงิน' : 'ไม่ระบุ')}
+                          ${tx.isAdvance ? `<span class="badge-advance ${tx.advanceStatus === 'settled' ? 'settled' : ''}">${tx.advanceStatus === 'settled' ? 'คืนแล้ว: ' : 'รอคืน: '}${tx.advanceTo || 'เพื่อน'}</span>` : ''}
+                          ${tx.isAdvanceSettlement ? `<span class="badge-advance settled">รับเงินคืน</span>` : ''}
+                        </span>
+                        <span class="tx-meta">${formatDateRelative(tx.date)}${tx.note ? ' · ' + tx.note : ''}</span>
+                      </div>
+                      <span class="tx-amount mono ${tx.type === 'income' ? 'income' : tx.type === 'expense' ? 'expense' : ''}">
+                        ${tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}${formatTHB(tx.amountMinor)}
+                      </span>
+                    </div>
+                  `;
+                }).join('')}
               </div>
-            ` : ''}
+            ` : '<div class="empty-state-sm">ยังไม่มีรายการในเดือนนี้</div>'}
           </div>
 
           <!-- Spending by category chart -->
           <div class="card">
             <div class="card-header">
-              <h2 class="card-title">รายจ่ายตามหมวด</h2>
+              <h2 class="card-title">สัดส่วนรายจ่าย</h2>
             </div>
             ${topCats.length > 0 ? `
               <div class="chart-wrap chart-wrap-donut">
@@ -164,7 +287,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
                 ${topCats.map((e, i) => `
                   <div class="legend-item">
                     <span class="legend-dot" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>
-                    <span class="legend-label">${e.cat.icon || ''} ${e.cat.name}</span>
+                    <span class="legend-label">${renderIcon(e.cat.icon || 'box', 14)} ${e.cat.name}</span>
                     <span class="legend-value mono">${formatTHB(e.total)}</span>
                   </div>
                 `).join('')}
@@ -172,124 +295,71 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
             ` : '<div class="empty-state-sm">ยังไม่มีรายจ่ายเดือนนี้</div>'}
           </div>
         </div>
-
-        ${pendingAdvances && pendingAdvances.length > 0 ? `
-          <!-- Receivables (ยอดรอเพื่อนเคลียร์) -->
-          <div class="card" id="card-receivables">
-            <div class="card-header">
-              <h2 class="card-title">🤝 ยอดรอเพื่อนเคลียร์ (${pendingAdvances.length})</h2>
-              <span class="mono" style="font-weight:700;color:#D97706">
-                รวม ${formatTHB(pendingAdvances.reduce((s, a) => s + a.amountMinor, 0))}
-              </span>
-            </div>
-            <div class="receivables-container">
-              ${pendingAdvances.map(adv => `
-                <div class="receivable-row" data-adv-id="${adv.id}">
-                  <div class="receivable-left">
-                    <span class="receivable-name">
-                      <span class="badge-advance">รอเคลียร์</span>
-                      <strong>${adv.advanceTo || 'เพื่อน'}</strong>
-                    </span>
-                    <span class="receivable-meta">${formatDateRelative(adv.date)}${adv.note ? ' · ' + adv.note : ''}</span>
-                  </div>
-                  <div class="receivable-right">
-                    <span class="mono" style="font-weight:700;color:#D97706">${formatTHB(adv.amountMinor)}</span>
-                    <button type="button" class="btn-primary btn-sm btn-settle-adv" data-adv-id="${adv.id}" style="padding:4px 10px;font-size:12px">
-                      ✓ คืนแล้ว
-                    </button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${upcomingBills && upcomingBills.length > 0 ? `
-          <!-- Subscriptions & Upcoming Bills -->
-          <div class="card" id="card-subscriptions">
-            <div class="card-header">
-              <h2 class="card-title">🔔 รอบบิลประจำที่ใกล้ถึง (${upcomingBills.filter(b => !b.isPaid).length})</h2>
-              <button class="link-btn" data-page="budget">ดูทั้งหมด / จัดการ →</button>
-            </div>
-            <div class="subs-list">
-              ${upcomingBills.slice(0, 4).map(b => `
-                <div class="sub-item-card" data-sub-id="${b.sub.id}">
-                  <div class="sub-left">
-                    <span class="sub-icon">${b.sub.icon || '📱'}</span>
-                    <div class="sub-details">
-                      <span class="sub-name">
-                        ${b.sub.name}
-                        <span class="sub-urgency-badge ${b.urgency}">${b.label}</span>
-                      </span>
-                      <span class="sub-meta">ตัดทุกวันที่ ${b.dueDay} ของเดือน</span>
-                    </div>
-                  </div>
-                  <div class="sub-right">
-                    <span class="mono" style="font-weight:700">${formatTHB(b.sub.amountMinor)}</span>
-                    ${!b.isPaid ? `
-                      <button type="button" class="btn-primary btn-sm btn-pay-sub" data-sub-id="${b.sub.id}" style="padding:4px 10px;font-size:12px">
-                        ✓ ชำระแล้ว
-                      </button>
-                    ` : `
-                      <span style="font-size:12px;color:var(--income);font-weight:600">✓ จ่ายแล้ว</span>
-                    `}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Recent transactions -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">รายการล่าสุด</h2>
-            <button class="link-btn" data-page="transactions">ดูทั้งหมด →</button>
-          </div>
-          ${recent.length > 0 ? `
-            <div class="tx-list">
-              ${recent.map(tx => {
-                const cat = catMap[tx.categoryId];
-                const acc = accountsWithBalance.find(a => a.id === (tx.accountId || tx.fromAccountId));
-                return `
-                  <div class="tx-row" data-tx-id="${tx.id}">
-                    <span class="tx-icon">${cat?.icon || (tx.type === 'transfer' ? '↔️' : tx.type === 'income' ? '💰' : '💸')}</span>
-                    <div class="tx-info">
-                      <span class="tx-name">
-                        ${cat?.name || (tx.type === 'transfer' ? 'โอนเงิน' : 'ไม่ระบุ')}
-                        ${tx.isAdvance ? `<span class="badge-advance ${tx.advanceStatus === 'settled' ? 'settled' : ''}" style="margin-left:6px">${tx.advanceStatus === 'settled' ? '✓ คืนแล้ว: ' : 'รอคืน: '}${tx.advanceTo || 'เพื่อน'}</span>` : ''}
-                        ${tx.isAdvanceSettlement ? `<span class="badge-advance settled" style="margin-left:6px">✓ รับเงินคืน</span>` : ''}
-                      </span>
-                      <span class="tx-meta">${formatDateRelative(tx.date)}${tx.note ? ' · ' + tx.note : ''}</span>
-                    </div>
-                    <span class="tx-amount mono ${tx.type === 'income' ? 'income' : tx.type === 'expense' ? 'expense' : ''}">
-                      ${tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}${formatTHB(tx.amountMinor)}
-                    </span>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          ` : '<div class="empty-state-sm">ยังไม่มีรายการเดือนนี้</div>'}
-        </div>
       </div>
     `;
 
-    // Draw donut chart
     if (topCats.length > 0) {
       requestAnimationFrame(() => drawDonut(topCats));
     }
 
-    // Month nav
     document.getElementById('prev-month')?.addEventListener('click', () => {
-      month = offsetMonth(month, -1); render();
+      month = offsetMonth(month, -1);
+      render();
     });
     document.getElementById('next-month')?.addEventListener('click', () => {
-      month = offsetMonth(month, 1); render();
+      month = offsetMonth(month, 1);
+      render();
+    });
+
+    // Collapsible banners
+    document.getElementById('toggle-receivables')?.addEventListener('click', () => {
+      receivablesExpanded = !receivablesExpanded;
+      document.getElementById('card-receivables')?.classList.toggle('open', receivablesExpanded);
+    });
+
+    document.getElementById('toggle-subscriptions')?.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-go-subs')) {
+        e.stopPropagation();
+        navigate?.('budget', { tab: 'subscriptions' });
+        return;
+      }
+      const card = document.getElementById('card-subscriptions');
+      billsExpanded = !card?.classList.contains('open');
+      card?.classList.toggle('open', billsExpanded);
+    });
+
+    // 1-Tap Account Sum Toggle on Mini Cards
+    container.querySelectorAll('.acc-mini-card[data-account-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        const accId = card.dataset.accountId;
+        const s = getSumSelection();
+        const currentlySelected = s[accId] !== false;
+        s[accId] = !currentlySelected;
+        saveSumSelection(s);
+
+        card.classList.toggle('excluded', currentlySelected);
+        const checkEl = card.querySelector('.acc-mini-check');
+        if (checkEl) checkEl.innerHTML = !currentlySelected ? renderIcon('check', 11) : '';
+
+        const total = visibleAccounts
+          .filter(a => s[a.id] !== false)
+          .reduce((sum, a) => sum + a.balance, 0);
+        const el = document.getElementById('dash-sum-value');
+        if (el) el.textContent = formatTHB(total);
+      });
     });
 
     // Tx row clicks
     container.querySelectorAll('.tx-row[data-tx-id]').forEach(row => {
       row.addEventListener('click', () => openTxModal(row.dataset.txId));
+    });
+
+    // Click subscription card -> edit subscription modal
+    container.querySelectorAll('.sub-item-card[data-sub-id]').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-pay-sub')) return;
+        window.openSubscriptionModal?.(card.dataset.subId);
+      });
     });
 
     // Advance settlement clicks
@@ -307,7 +377,6 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
         );
         if (!ok) return;
 
-        // 1. Mark original advance as settled
         adv.advanceStatus = 'settled';
         adv.settledAt = new Date().toISOString();
         adv.updatedAt = new Date().toISOString();
@@ -315,7 +384,6 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
         await store.addToPendingQueue({ id: adv.id, store: 'transactions', op: 'update' });
         syncTransaction(adv).catch(console.error);
 
-        // 2. Create settlement income transaction into the same account
         const settleTx = makeTransaction({
           type: 'income',
           amountMinor: adv.amountMinor,
@@ -329,7 +397,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
         await store.addToPendingQueue({ id: settleTx.id, store: 'transactions', op: 'create' });
         syncTransaction(settleTx).catch(console.error);
 
-        showToast(`บันทึกรับเงินคืนจาก ${friendName} เรียบร้อยแล้ว 🎉`);
+        showToast(`บันทึกรับเงินคืนจาก ${friendName} เรียบร้อยแล้ว`);
         render();
       });
     });
@@ -344,36 +412,13 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
 
         try {
           await paySubscription(subId, store);
-          showToast('บันทึกการชำระบิลเรียบร้อยแล้ว ✓');
+          showToast('บันทึกการชำระบิลเรียบร้อยแล้ว');
           render();
         } catch (err) {
           showToast(err.message, 'error');
         }
       });
     });
-
-    // Checkbox sum
-    container.querySelectorAll('.account-check').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const s = getSumSelection();
-        s[cb.dataset.accId] = cb.checked;
-        saveSumSelection(s);
-        const visIds = visibleAccounts.map(a => a.id);
-        const total = visibleAccounts
-          .filter(a => s[a.id] !== false)
-          .reduce((sum, a) => sum + a.balance, 0);
-        const el = document.getElementById('dash-sum-value');
-        if (el) el.textContent = formatTHB(total);
-      });
-    });
-
-    // Drag-to-reorder
-    bindDragReorder(
-      document.getElementById('dash-account-list'),
-      '.account-row[data-account-id]',
-      'data-account-id',
-      visibleAccounts.map(a => a.id)
-    );
   }
 
   await render();
@@ -385,7 +430,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
 
 // ── Drag-to-reorder helper ────────────────────────────────────
 
-function bindDragReorder(list, rowSelector, dataAttr, initialOrder) {
+export function bindDragReorder(list, rowSelector, dataAttr, initialOrder) {
   if (!list) return;
   let dragSrcId = null;
   let currentOrder = [...initialOrder];
@@ -426,12 +471,9 @@ function bindDragReorder(list, rowSelector, dataAttr, initialOrder) {
   });
 }
 
-// Export for accounts.js to reuse
-export { bindDragReorder };
-
 // ── Chart ─────────────────────────────────────────────────────
 
-const CHART_COLORS = ['#0D9488','#14B8A6','#2DD4BF','#5EEAD4','#99F6E4','#6366F1','#8B5CF6','#EC4899'];
+const CHART_COLORS = ['#18181B','#0D9488','#6366F1','#F59E0B','#EC4899','#3B82F6','#8B5CF6','#64748B'];
 
 function drawDonut(topCats) {
   const canvas = document.getElementById('donut-chart');
@@ -446,21 +488,19 @@ function drawDonut(topCats) {
         data:            topCats.map(e => e.total / 100),
         backgroundColor: CHART_COLORS.slice(0, topCats.length),
         borderWidth:     2,
-        borderColor:     '#fff',
+        borderColor:     document.documentElement.dataset.theme === 'dark' ? '#121215' : '#ffffff',
         hoverOffset:     4,
       }],
     },
     options: {
-      cutout:   '70%',
+      cutout:   '72%',
       plugins:  { legend: { display: false }, tooltip: {
         callbacks: { label: ctx => ` ฿${ctx.parsed.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` },
       }},
-      animation: { duration: 400 },
+      animation: { duration: 350 },
     },
   });
 }
-
-// ── Helpers ───────────────────────────────────────────────────
 
 function offsetMonth(monthStr, delta) {
   const [y, m] = monthStr.split('-').map(Number);

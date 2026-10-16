@@ -1,10 +1,10 @@
 // ─────────────────────────────────────────────────────────────
 //  app.js — entry point, router, shared modal management
-//  Finance Tracker v2
+//  Finance Tracker v4.0 (Ultra-Minimal Mobile-First)
 // ─────────────────────────────────────────────────────────────
 
 import { LocalStore }                    from './local-store.js';
-import { getConfig, saveConfig, isConfigured, getSyncState, getLastSync, getGeminiKey, saveGeminiKey } from './settings.js';
+import { getConfig, saveConfig, isConfigured, getSyncState, getGeminiKey, saveGeminiKey } from './settings.js';
 import { GitHubSync }                    from './sync.js';
 import {
   pullAllFromSupabase,
@@ -26,8 +26,15 @@ import { makeTransaction, makeAccount, makeCategory, makeBudget, genId, todayStr
 import { parseAmount, formatTHB, formatMonth } from './format.js';
 import { parseSlipImage, matchBankToAccount, compressImage } from './slip-parser.js';
 import { suggestCategory, learnHabit, getHabitData } from './habit-engine.js';
-import { getSubscriptions, saveSubscription, deleteSubscription, paySubscription, getUpcomingBills } from './subscriptions.js';
+import { getSubscriptions, saveSubscription, deleteSubscription, paySubscription } from './subscriptions.js';
 import { exportTransactions, exportFullJsonBackup, importFullJsonBackup } from './export.js';
+import {
+  renderIcon,
+  normalizeIconKey,
+  ACCOUNT_ICON_KEYS,
+  CATEGORY_ICON_KEYS,
+  SUB_ICON_KEYS,
+} from './icons.js';
 import { initDashboard }                 from './pages/dashboard.js';
 import { initTransactions }              from './pages/transactions.js';
 import { initBudget }                    from './pages/budget.js';
@@ -43,10 +50,10 @@ const syncer = new GitHubSync();
 // ── Font picker ───────────────────────────────────────────────
 
 const FONTS = [
-  { id: 'dm-sans', name: 'DM Sans',  sample: 'DM Sans — สวยงาม',   css: "'DM Sans', system-ui, sans-serif",  url: null },
-  { id: 'sarabun', name: 'Sarabun',  sample: 'Sarabun — อ่านง่าย', css: "'Sarabun', system-ui, sans-serif",  url: 'https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap' },
-  { id: 'prompt',  name: 'Prompt',   sample: 'Prompt — กลมนุ่ม',   css: "'Prompt', system-ui, sans-serif",   url: 'https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap' },
-  { id: 'inter',   name: 'Inter',    sample: 'Inter — เป็นทางการ', css: "'Inter', system-ui, sans-serif",    url: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap' },
+  { id: 'dm-sans', name: 'DM Sans',  sample: 'DM Sans — ทันสมัย คมชัด',   css: "'DM Sans', 'Noto Sans Thai', system-ui, sans-serif",  url: null },
+  { id: 'sarabun', name: 'Sarabun',  sample: 'Sarabun — อ่านง่าย สบายตา', css: "'Sarabun', system-ui, sans-serif",  url: 'https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap' },
+  { id: 'prompt',  name: 'Prompt',   sample: 'Prompt — กลมนุ่ม สมดุล',   css: "'Prompt', system-ui, sans-serif",   url: 'https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap' },
+  { id: 'inter',   name: 'Inter',    sample: 'Inter — เรียบง่าย มาตรฐาน', css: "'Inter', 'Noto Sans Thai', system-ui, sans-serif",    url: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap' },
 ];
 
 const FONT_KEY = 'ft_font';
@@ -68,13 +75,12 @@ function applyFont(fontId) {
   localStorage.setItem(FONT_KEY, font.id);
 }
 
-// Apply saved font on boot
 applyFont(localStorage.getItem(FONT_KEY) || 'dm-sans');
 
 // ── Theme picker ──────────────────────────────────────────────
 
 const THEMES = [
-  { id:'mono',   name:'Mono',   color:'#18181B', light:'#3F3F46', p600:'#09090B', p700:'#09090B', p50:'#FAFAFA', p100:'#F4F4F5', p50dk:'#1a1a1f', shadow:'rgba(0,0,0,0.35)'   },
+  { id:'mono',   name:'Mono',   color:'#18181B', light:'#3F3F46', p600:'#09090B', p700:'#09090B', p50:'#F4F4F5', p100:'#E4E4E7', p50dk:'#27272A', shadow:'rgba(0,0,0,0.35)'   },
   { id:'teal',   name:'Teal',   color:'#0D9488', light:'#14B8A6', p600:'#0F766E', p700:'#115E59', p50:'#F0FDFA', p100:'#CCFBF1', p50dk:'#082420', shadow:'rgba(13,148,136,0.45)'  },
   { id:'indigo', name:'Indigo', color:'#6366F1', light:'#818CF8', p600:'#4F46E5', p700:'#4338CA', p50:'#EEF2FF', p100:'#C7D2FE', p50dk:'#1a1c4e', shadow:'rgba(99,102,241,0.45)'  },
   { id:'violet', name:'Violet', color:'#8B5CF6', light:'#A78BFA', p600:'#7C3AED', p700:'#6D28D9', p50:'#F5F3FF', p100:'#DDD6FE', p50dk:'#1e1044', shadow:'rgba(139,92,246,0.45)'  },
@@ -92,36 +98,47 @@ function applyTheme(themeId) {
   const theme  = THEMES.find(t => t.id === themeId) || THEMES[0];
   const isDark = document.documentElement.dataset.theme === 'dark';
   const r = document.documentElement.style;
-  r.setProperty('--primary',        theme.color);
-  r.setProperty('--primary-light',  theme.light);
-  r.setProperty('--primary-600',    theme.p600);
-  r.setProperty('--primary-700',    theme.p700);
-  r.setProperty('--primary-50',     isDark ? theme.p50dk : theme.p50);
-  r.setProperty('--primary-100',    theme.p100);
-  r.setProperty('--primary-shadow', theme.shadow);
+  if (theme.id === 'mono') {
+    r.setProperty('--primary',        isDark ? '#FAFAFA' : '#09090B');
+    r.setProperty('--primary-light',  isDark ? '#E4E4E7' : '#3F3F46');
+    r.setProperty('--primary-600',    isDark ? '#E4E4E7' : '#18181B');
+    r.setProperty('--primary-700',    isDark ? '#D4D4D8' : '#27272A');
+    r.setProperty('--primary-50',     isDark ? '#27272A' : '#F4F4F5');
+    r.setProperty('--primary-100',    isDark ? '#3F3F46' : '#E4E4E7');
+    r.setProperty('--primary-shadow', theme.shadow);
+  } else {
+    r.setProperty('--primary',        theme.color);
+    r.setProperty('--primary-light',  theme.light);
+    r.setProperty('--primary-600',    theme.p600);
+    r.setProperty('--primary-700',    theme.p700);
+    r.setProperty('--primary-50',     isDark ? theme.p50dk : theme.p50);
+    r.setProperty('--primary-100',    theme.p100);
+    r.setProperty('--primary-shadow', theme.shadow);
+  }
   localStorage.setItem(THEME_KEY, theme.id);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.color);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark ? '#09090B' : theme.color);
 }
 
 function applyDarkMode(isDark) {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   localStorage.setItem(DARK_KEY, isDark ? '1' : '0');
-  applyTheme(localStorage.getItem(THEME_KEY) || 'teal');
+  applyTheme(localStorage.getItem(THEME_KEY) || 'mono');
 }
 
-// Apply on boot — dark mode first so applyTheme reads correct data-theme
 const _bootDark = localStorage.getItem(DARK_KEY) === '1';
 document.documentElement.setAttribute('data-theme', _bootDark ? 'dark' : 'light');
 applyTheme(localStorage.getItem(THEME_KEY) || 'mono');
 
 let currentPage    = 'dashboard';
-let pageCleanup    = null;   // cleanup fn returned by page init
-let pendingConfirm = null;   // resolve fn for confirm modal
+let currentPageOpts = {};
+let pageCleanup    = null;
+let pendingConfirm = null;
 
 // ── Boot ──────────────────────────────────────────────────────
 
 async function boot() {
   await store.init();
+  initAllIconPickers();
 
   if (isConfigured()) {
     showApp();
@@ -166,7 +183,6 @@ async function showApp() {
     }
   }
 }
-
 
 // ── Setup form ────────────────────────────────────────────────
 
@@ -216,22 +232,29 @@ const PAGE_MAP = {
 };
 
 const PAGE_TITLES = {
-  dashboard:    'Dashboard',
+  dashboard:    'ภาพรวม',
   transactions: 'รายการ',
-  budget:       'งบประมาณ',
+  budget:       'งบ & บิลประจำ',
   analytics:    'วิเคราะห์',
-  accounts:     'บัญชี & หมวด',
+  accounts:     'บัญชี & หมวดหมู่',
   settings:     'ตั้งค่า',
 };
 
-async function navigate(page) {
+export async function navigate(page, opts = {}) {
   if (!PAGE_MAP[page]) page = 'dashboard';
   currentPage = page;
+  currentPageOpts = opts || {};
 
   // Update nav active state
   document.querySelectorAll('.nav-link[data-page], .bnav-item[data-page]').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
   });
+
+  // Update mobile topbar accounts pill active state
+  const topbarAccBtn = document.getElementById('topbar-btn-accounts');
+  if (topbarAccBtn) {
+    topbarAccBtn.classList.toggle('active', page === 'accounts');
+  }
 
   // Update mobile topbar title
   const topbarTitle = document.getElementById('topbar-title');
@@ -248,7 +271,14 @@ async function navigate(page) {
   content.innerHTML = '<div class="page-loading">กำลังโหลด...</div>';
 
   try {
-    const cleanup = await PAGE_MAP[page](content, store, { openTxModal, showToast, showConfirm, refreshPage: () => navigate(page) });
+    const cleanup = await PAGE_MAP[page](content, store, {
+      openTxModal,
+      showToast,
+      showConfirm,
+      navigate,
+      refreshPage: () => navigate(page, currentPageOpts),
+      ...currentPageOpts,
+    });
     pageCleanup = cleanup || null;
   } catch (err) {
     console.error(`Page ${page} error:`, err);
@@ -257,31 +287,45 @@ async function navigate(page) {
 }
 
 function refreshPage() {
-  navigate(currentPage);
+  navigate(currentPage, currentPageOpts);
 }
 
-// ── Nav click delegation ──────────────────────────────────────
+// ── Nav & Global Action Delegation ────────────────────────────
 
 document.getElementById('main-app')?.addEventListener('click', (e) => {
   const navEl = e.target.closest('[data-page]');
   if (navEl && navEl.dataset.page) {
     e.preventDefault();
-    navigate(navEl.dataset.page);
+    const tab = navEl.dataset.tab;
+    navigate(navEl.dataset.page, tab ? { tab } : {});
+    return;
   }
 
-  // FAB add button
-  if (e.target.closest('#btn-add-tx-fab') || e.target.closest('#btn-add-tx-top')) {
+  // Add transaction buttons (Docked Bottom Nav + Desktop Sidebar + Page Top)
+  if (
+    e.target.closest('#btn-add-tx-fab') ||
+    e.target.closest('#btn-sidebar-add') ||
+    e.target.closest('#btn-add-tx-top')
+  ) {
     openTxModal();
+    return;
   }
 
-  // Slip scan buttons
-  if (e.target.closest('#btn-slip-fab') || e.target.closest('#topbar-btn-slip')) {
-    openSlipModal();
+  // 1-Tap Slip Scan buttons (Docked Bottom Nav + Desktop Sidebar + Topbar)
+  if (
+    e.target.closest('#btn-slip-fab') ||
+    e.target.closest('#btn-sidebar-scan') ||
+    e.target.closest('#topbar-btn-slip')
+  ) {
+    triggerSlipScan();
+    return;
   }
-  if (e.target.closest('#btn-tx-modal-scan-slip')) {
-    closeModal('tx-modal');
-    openSlipModal();
-  }
+});
+
+// Scan slip button inside tx-modal header
+document.getElementById('btn-tx-modal-scan-slip')?.addEventListener('click', () => {
+  closeModal('tx-modal');
+  triggerSlipScan();
 });
 
 // ── Sync ──────────────────────────────────────────────────────
@@ -296,7 +340,7 @@ async function doSync() {
     const result = await pullAllFromSupabase(store);
     if (result.ok) {
       updateSyncWidget('synced');
-      showToast(`ซิงค์ข้อมูลกับ Supabase สำเร็จ (${result.count} รายการ) ⚡`);
+      showToast(`ซิงค์ข้อมูลกับ Supabase สำเร็จ (${result.count} รายการ)`);
       refreshPage();
     } else {
       updateSyncWidget('error');
@@ -321,7 +365,6 @@ async function doSync() {
   }
 }
 
-// Auto-pull from Supabase when window regains focus or tab becomes visible
 let _isPulling = false;
 async function pullLatestIfVisible() {
   if (_isPulling || !isSupabaseConfigured()) return;
@@ -353,8 +396,6 @@ window.addEventListener('focus', () => {
   pullLatestIfVisible();
 });
 
-
-
 function updateSyncWidget(stateOverride) {
   const state = stateOverride || getSyncState();
   const dot   = document.getElementById('sync-dot');
@@ -367,12 +408,12 @@ function updateSyncWidget(stateOverride) {
     if (!d) return;
     d.className = 'sync-dot';
     switch (state) {
-      case 'synced':   d.classList.add('synced');  if (l) l.textContent = 'Synced';   break;
-      case 'pending':  d.classList.add('pending'); if (l) l.textContent = 'Pending';  break;
-      case 'syncing':  d.classList.add('syncing'); if (l) l.textContent = 'Syncing…'; break;
-      case 'error':    d.classList.add('error');   if (l) l.textContent = 'Error';    break;
-      case 'conflict': d.classList.add('error');   if (l) l.textContent = 'Conflict'; break;
-      default:         d.classList.add('offline'); if (l) l.textContent = 'Offline';  break;
+      case 'synced':   d.classList.add('synced');  if (l) l.textContent = 'พร้อมใช้งาน'; break;
+      case 'pending':  d.classList.add('pending'); if (l) l.textContent = 'รอซิงค์';     break;
+      case 'syncing':  d.classList.add('syncing'); if (l) l.textContent = 'กำลังซิงค์…'; break;
+      case 'error':    d.classList.add('error');   if (l) l.textContent = 'ซิงค์ขัดข้อง'; break;
+      case 'conflict': d.classList.add('error');   if (l) l.textContent = 'ข้อมูลชนกัน';  break;
+      default:         d.classList.add('offline'); if (l) l.textContent = 'ออฟไลน์';    break;
     }
   };
 
@@ -380,60 +421,93 @@ function updateSyncWidget(stateOverride) {
   applyState(topbarDot, null);
 }
 
-// ── Transaction modal ─────────────────────────────────────────
+// ── 1-Tap Chip Grid Helper (Synced with Hidden <select>) ─────
+
+function renderChipSelector(chipContainerId, selectId, items, selectedId = null, fallbackIcon = 'box') {
+  const selectEl = document.getElementById(selectId);
+  const chipContainer = document.getElementById(chipContainerId);
+  if (!selectEl && !chipContainer) return;
+
+  const activeId = (selectedId && items.some(it => it.id === selectedId))
+    ? selectedId
+    : (items[0]?.id || '');
+
+  if (selectEl) {
+    selectEl.innerHTML = items.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
+    selectEl.value = activeId;
+  }
+
+  if (chipContainer) {
+    chipContainer.innerHTML = items.map(it => {
+      const isSelected = it.id === activeId;
+      return `
+        <button type="button" class="quick-chip ${isSelected ? 'selected' : ''}" data-val="${it.id}">
+          ${renderIcon(it.icon || fallbackIcon, 15)}
+          <span>${it.name}</span>
+        </button>
+      `;
+    }).join('');
+
+    chipContainer.querySelectorAll('.quick-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.val;
+        chipContainer.querySelectorAll('.quick-chip').forEach(b => {
+          b.classList.toggle('selected', b.dataset.val === val);
+        });
+        if (selectEl) {
+          selectEl.value = val;
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    });
+  }
+}
+
+// ── Transaction modal (1-Tap Chip Selectors) ─────────────────
 
 let txModalEditId = null;
 
 async function openTxModal(txId = null) {
   txModalEditId = txId;
 
-  const modal     = document.getElementById('tx-modal');
   const titleEl   = document.getElementById('tx-modal-title');
   const deleteBtn = document.getElementById('btn-delete-tx');
   const idInput   = document.getElementById('tx-id');
 
-  // Populate selects
   const [accounts, categories] = await Promise.all([
     store.getAccounts(),
     store.getCategories(),
   ]);
 
-  const accOpts = accounts.map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`).join('');
-  document.getElementById('tx-account').innerHTML    = accOpts;
-  document.getElementById('tx-from-account').innerHTML = accOpts;
-  document.getElementById('tx-to-account').innerHTML   = accOpts;
-
   const expCats = categories.filter(c => c.type === 'expense' || c.type === 'both');
   const incCats = categories.filter(c => c.type === 'income'  || c.type === 'both');
 
   if (txId) {
-    // Edit mode
     const tx = await store.get('transactions', txId);
     if (!tx) return;
 
-    titleEl.textContent  = 'แก้ไขรายการ';
+    titleEl.textContent = 'แก้ไขรายการ';
     deleteBtn.classList.remove('hidden');
     idInput.value = tx.id;
 
-    // Set type tab
-    setTxType(tx.type);
+    await setTxType(tx.type, tx.categoryId);
 
     document.getElementById('tx-amount').value = (tx.amountMinor / 100).toFixed(2);
     document.getElementById('tx-date').value   = tx.date;
     document.getElementById('tx-note').value   = tx.note || '';
 
     if (tx.type === 'transfer') {
-      document.getElementById('tx-from-account').value = tx.fromAccountId || '';
-      document.getElementById('tx-to-account').value   = tx.toAccountId   || '';
+      renderChipSelector('tx-account-chips', 'tx-account', accounts, accounts[0]?.id, 'credit-card');
+      renderChipSelector('tx-from-account-chips', 'tx-from-account', accounts, tx.fromAccountId, 'credit-card');
+      renderChipSelector('tx-to-account-chips', 'tx-to-account', accounts, tx.toAccountId, 'credit-card');
     } else {
-      document.getElementById('tx-account').value = tx.accountId || '';
-      const catSel = document.getElementById('tx-category');
-      catSel.innerHTML = (tx.type === 'income' ? incCats : expCats)
-        .map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
-      catSel.value = tx.categoryId || '';
+      renderChipSelector('tx-account-chips', 'tx-account', accounts, tx.accountId, 'credit-card');
+      renderChipSelector('tx-from-account-chips', 'tx-from-account', accounts, tx.accountId, 'credit-card');
+      renderChipSelector('tx-to-account-chips', 'tx-to-account', accounts, accounts[1]?.id || accounts[0]?.id, 'credit-card');
+      const targetCats = tx.type === 'income' ? incCats : expCats;
+      renderChipSelector('tx-category-chips', 'tx-category', targetCats, tx.categoryId, 'box');
     }
 
-    // Set advance fields
     const isAdv = Boolean(tx.isAdvance);
     const advCheck = document.getElementById('tx-is-advance');
     const advBox   = document.getElementById('tx-advance-details');
@@ -442,12 +516,16 @@ async function openTxModal(txId = null) {
     if (advBox) advBox.classList.toggle('hidden', !isAdv);
     if (advInput) advInput.value = tx.advanceTo || '';
   } else {
-    // Add mode
-    titleEl.textContent = 'เพิ่มรายการ';
+    titleEl.textContent = 'จดรายการ';
     deleteBtn.classList.add('hidden');
     idInput.value = '';
 
-    setTxType('expense');
+    renderChipSelector('tx-account-chips', 'tx-account', accounts, accounts[0]?.id, 'credit-card');
+    renderChipSelector('tx-from-account-chips', 'tx-from-account', accounts, accounts[0]?.id, 'credit-card');
+    renderChipSelector('tx-to-account-chips', 'tx-to-account', accounts, accounts[1]?.id || accounts[0]?.id, 'credit-card');
+    renderChipSelector('tx-category-chips', 'tx-category', expCats, expCats[0]?.id, 'box');
+
+    await setTxType('expense', expCats[0]?.id);
     document.getElementById('tx-amount').value = '';
     document.getElementById('tx-date').value   = todayStr();
     document.getElementById('tx-note').value   = '';
@@ -458,54 +536,54 @@ async function openTxModal(txId = null) {
     if (advCheck) advCheck.checked = false;
     if (advBox) advBox.classList.add('hidden');
     if (advInput) advInput.value = '';
-
-    const catSel = document.getElementById('tx-category');
-    catSel.innerHTML = expCats.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
   }
 
   openModal('tx-modal');
 }
 
-function setTxType(type) {
-  document.getElementById('tx-id') && (document.getElementById('tx-id').dataset.type = type);
+async function setTxType(type, preferredCatId = null) {
+  const idEl = document.getElementById('tx-id');
+  if (idEl) idEl.dataset.type = type;
+
   document.querySelectorAll('#tx-type-tabs .type-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.type === type);
   });
 
   const isTransfer = type === 'transfer';
-  document.getElementById('grp-account').classList.toggle('hidden', isTransfer);
-  document.getElementById('grp-from-account').classList.toggle('hidden', !isTransfer);
-  document.getElementById('grp-to-account').classList.toggle('hidden', !isTransfer);
-  document.getElementById('grp-category').classList.toggle('hidden', isTransfer);
+  const isIncome   = type === 'income';
+  const amtInp     = document.getElementById('tx-amount');
+  if (amtInp) {
+    amtInp.style.color = isIncome ? 'var(--income)' : (isTransfer ? 'var(--primary)' : 'var(--expense)');
+  }
+
+  document.getElementById('grp-account')?.classList.toggle('hidden', isTransfer);
+  document.getElementById('grp-from-account')?.classList.toggle('hidden', !isTransfer);
+  document.getElementById('grp-to-account')?.classList.toggle('hidden', !isTransfer);
+  document.getElementById('grp-category')?.classList.toggle('hidden', isTransfer);
   document.getElementById('grp-advance')?.classList.toggle('hidden', type !== 'expense');
 
-  // Update category options on type change
   if (!isTransfer) {
-    store.getCategories().then(cats => {
-      const filtered = cats.filter(c => c.type === type || c.type === 'both');
-      document.getElementById('tx-category').innerHTML =
-        filtered.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
-    });
+    const cats = await store.getCategories();
+    const filtered = cats.filter(c => c.type === type || c.type === 'both');
+    const curSel = preferredCatId || document.getElementById('tx-category')?.value;
+    renderChipSelector('tx-category-chips', 'tx-category', filtered, curSel, 'box');
   }
 }
 
-// Type tab clicks
 document.getElementById('tx-type-tabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.type-tab');
   if (tab) setTxType(tab.dataset.type);
 });
 
-// Advance toggle in tx modal
 document.getElementById('tx-is-advance')?.addEventListener('change', (e) => {
   document.getElementById('tx-advance-details')?.classList.toggle('hidden', !e.target.checked);
 });
 
-// Transaction form submit
 document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  const activeTabs = document.querySelector('#tx-type-tabs .type-tab.active');
-  const type       = activeTabs?.dataset.type || 'expense';
+  const activeTabs  = document.querySelector('#tx-type-tabs .type-tab.active');
+  const type        = activeTabs?.dataset.type || 'expense';
   const amountMinor = parseAmount(document.getElementById('tx-amount').value);
   const date        = document.getElementById('tx-date').value;
   const note        = document.getElementById('tx-note').value.trim();
@@ -567,12 +645,11 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
   }
 
   closeModal('tx-modal');
-  showToast(editId ? 'แก้ไขรายการแล้ว' : 'เพิ่มรายการแล้ว');
+  showToast(editId ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว');
   updateSyncWidget('synced');
   refreshPage();
 });
 
-// Delete transaction
 document.getElementById('btn-delete-tx')?.addEventListener('click', async () => {
   const editId = document.getElementById('tx-id').value;
   if (!editId) return;
@@ -590,7 +667,7 @@ document.getElementById('btn-delete-tx')?.addEventListener('click', async () => 
 });
 
 
-// ── Slip modal (Batch Scan & Habit Matching) ──────────────────
+// ── Slip modal (1-Tap Trigger, Compact Review & Lightbox) ────
 
 let slipQueue = [];
 let currentSlipIndex = 0;
@@ -610,7 +687,51 @@ function revokeCurrentThumb() {
   }
 }
 
-function setSlipType(type) {
+function resetSlipModalState() {
+  revokeCurrentThumb();
+  slipQueue = [];
+  currentSlipIndex = 0;
+  currentParsedData = null;
+  isProcessingSlip = false;
+  setSplitMode(false);
+  splitItems = [];
+
+  const slipAdvCheck = document.getElementById('slip-is-advance');
+  const slipAdvBox   = document.getElementById('slip-advance-details');
+  const slipAdvInput = document.getElementById('slip-advance-to');
+  if (slipAdvCheck) slipAdvCheck.checked = false;
+  if (slipAdvBox) slipAdvBox.classList.add('hidden');
+  if (slipAdvInput) slipAdvInput.value = '';
+
+  document.getElementById('slip-drop-section')?.classList.remove('hidden');
+  document.getElementById('slip-loading-section')?.classList.add('hidden');
+  document.getElementById('slip-preview-section')?.classList.add('hidden');
+  document.getElementById('slip-queue-badge')?.classList.add('hidden');
+
+  const fileInput = document.getElementById('slip-file-input');
+  if (fileInput) fileInput.value = '';
+}
+
+/**
+ * 1-Tap Slip Scan Trigger:
+ * Opens native file/camera picker immediately if Gemini API key is configured,
+ * while also preparing #slip-modal so desktop drag-and-drop works seamlessly.
+ */
+function triggerSlipScan() {
+  resetSlipModalState();
+  openModal('slip-modal');
+  if (getGeminiKey()) {
+    document.getElementById('slip-file-input')?.click();
+  }
+}
+
+async function openSlipModal() {
+  resetSlipModalState();
+  openModal('slip-modal');
+}
+window.openSlipModal = openSlipModal;
+
+function setSlipType(type, preferredCatId = null) {
   currentSlipType = type || 'expense';
   document.querySelectorAll('#slip-type-tabs .type-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.type === currentSlipType);
@@ -643,13 +764,9 @@ function setSlipType(type) {
     setSplitMode(false);
   } else {
     const filtered = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
-    const catSelect = document.getElementById('slip-category');
-    if (catSelect && filtered.length) {
-      const prevVal = catSelect.value;
-      catSelect.innerHTML = filtered
-        .map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`)
-        .join('');
-      if (filtered.some(c => c.id === prevVal)) catSelect.value = prevVal;
+    if (filtered.length) {
+      const prevVal = preferredCatId || document.getElementById('slip-category')?.value;
+      renderChipSelector('slip-category-chips', 'slip-category', filtered, prevVal, 'box');
     }
     if (isSplitMode) {
       renderSplitItems();
@@ -657,7 +774,6 @@ function setSlipType(type) {
   }
 }
 
-// Slip type tab clicks
 document.getElementById('slip-type-tabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.type-tab');
   if (tab) setSlipType(tab.dataset.type);
@@ -669,7 +785,11 @@ function setSplitMode(enabled) {
   const singleSec = document.getElementById('slip-single-section');
   const splitSec  = document.getElementById('slip-split-section');
 
-  if (toggleBtn) toggleBtn.textContent = enabled ? '← รวมเป็น 1 รายการ' : '➗ แยกหลายรายการ';
+  if (toggleBtn) {
+    toggleBtn.innerHTML = enabled
+      ? `${renderIcon('chevron-left', 13)}<span>รวมเป็น 1 รายการ</span>`
+      : `${renderIcon('split', 13)}<span>แยกหลายหมวด</span>`;
+  }
   singleSec?.classList.toggle('hidden', enabled);
   splitSec?.classList.toggle('hidden', !enabled);
 
@@ -696,39 +816,12 @@ function setSplitMode(enabled) {
 
 function renderSplitItems() {
   const container = document.getElementById('split-items-container');
-  const banner = document.getElementById('split-countdown-banner');
-  const remainingVal = document.getElementById('split-remaining-val');
-  const saveBtn = document.getElementById('btn-slip-save');
-  const fullSlipAmountMinor = parseAmount(document.getElementById('slip-amount')?.value) || 0;
-
-  const allocatedMinor = splitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
-  const remainingMinor = fullSlipAmountMinor - allocatedMinor;
-
-  if (banner && remainingVal) {
-    banner.className = 'split-banner';
-    if (remainingMinor === 0) {
-      banner.classList.add('matched');
-      banner.querySelector('span:first-child').textContent = '✓ จัดสรรครบลงตัวพอดี:';
-      remainingVal.textContent = '0.00 ฿';
-      if (saveBtn) saveBtn.disabled = false;
-    } else if (remainingMinor > 0) {
-      banner.classList.add('pending');
-      banner.querySelector('span:first-child').textContent = 'คงเหลือต้องจัดสรร:';
-      remainingVal.textContent = `${(remainingMinor / 100).toFixed(2)} ฿`;
-      if (saveBtn) saveBtn.disabled = true;
-    } else {
-      banner.classList.add('over');
-      banner.querySelector('span:first-child').textContent = '⚠️ เกินยอดสลิปไป:';
-      remainingVal.textContent = `${(Math.abs(remainingMinor) / 100).toFixed(2)} ฿`;
-      if (saveBtn) saveBtn.disabled = true;
-    }
-  }
-
+  updateCountdownBannerOnly();
   if (!container) return;
 
   const filteredCats = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
   const catOpts = (selectedCatId) => filteredCats
-    .map(c => `<option value="${c.id}" ${c.id === selectedCatId ? 'selected' : ''}>${c.icon || ''} ${c.name}</option>`)
+    .map(c => `<option value="${c.id}" ${c.id === selectedCatId ? 'selected' : ''}>${c.name}</option>`)
     .join('');
 
   container.innerHTML = splitItems.map(item => `
@@ -755,7 +848,6 @@ function renderSplitItems() {
     </div>
   `).join('');
 
-  // Wire events
   container.querySelectorAll('.split-item-amt').forEach(inp => {
     inp.addEventListener('input', () => {
       const it = splitItems.find(x => x.id === inp.dataset.id);
@@ -820,7 +912,7 @@ function updateCountdownBannerOnly() {
     banner.className = 'split-banner';
     if (remainingMinor === 0) {
       banner.classList.add('matched');
-      banner.querySelector('span:first-child').textContent = '✓ จัดสรรครบลงตัวพอดี:';
+      banner.querySelector('span:first-child').textContent = 'จัดสรรครบลงตัวพอดี:';
       remainingVal.textContent = '0.00 ฿';
       if (saveBtn) saveBtn.disabled = false;
     } else if (remainingMinor > 0) {
@@ -830,14 +922,13 @@ function updateCountdownBannerOnly() {
       if (saveBtn) saveBtn.disabled = true;
     } else {
       banner.classList.add('over');
-      banner.querySelector('span:first-child').textContent = '⚠️ เกินยอดสลิปไป:';
+      banner.querySelector('span:first-child').textContent = 'เกินยอดสลิปไป:';
       remainingVal.textContent = `${(Math.abs(remainingMinor) / 100).toFixed(2)} ฿`;
       if (saveBtn) saveBtn.disabled = true;
     }
   }
 }
 
-// Split Mode Listeners
 document.getElementById('btn-toggle-split')?.addEventListener('click', () => {
   setSplitMode(!isSplitMode);
 });
@@ -875,33 +966,27 @@ document.getElementById('slip-amount')?.addEventListener('input', () => {
   if (isSplitMode) updateCountdownBannerOnly();
 });
 
-async function openSlipModal() {
-  revokeCurrentThumb();
-  slipQueue = [];
-  currentSlipIndex = 0;
-  currentParsedData = null;
-  isProcessingSlip = false;
-  setSplitMode(false);
-  splitItems = [];
+// Slip Thumbnail Zoom Lightbox
+document.getElementById('btn-zoom-slip')?.addEventListener('click', () => {
+  const lightbox = document.getElementById('slip-lightbox');
+  const fullImg  = document.getElementById('slip-lightbox-img');
+  const thumbImg = document.getElementById('slip-thumb-img');
+  const src      = currentThumbUrl || thumbImg?.src;
+  if (lightbox && fullImg && src) {
+    fullImg.src = src;
+    lightbox.classList.remove('hidden');
+  }
+});
 
-  const slipAdvCheck = document.getElementById('slip-is-advance');
-  const slipAdvBox   = document.getElementById('slip-advance-details');
-  const slipAdvInput = document.getElementById('slip-advance-to');
-  if (slipAdvCheck) slipAdvCheck.checked = false;
-  if (slipAdvBox) slipAdvBox.classList.add('hidden');
-  if (slipAdvInput) slipAdvInput.value = '';
+document.getElementById('btn-close-lightbox')?.addEventListener('click', () => {
+  document.getElementById('slip-lightbox')?.classList.add('hidden');
+});
 
-  document.getElementById('slip-drop-section')?.classList.remove('hidden');
-  document.getElementById('slip-loading-section')?.classList.add('hidden');
-  document.getElementById('slip-preview-section')?.classList.add('hidden');
-  document.getElementById('slip-queue-badge')?.classList.add('hidden');
-
-  const fileInput = document.getElementById('slip-file-input');
-  if (fileInput) fileInput.value = '';
-
-  openModal('slip-modal');
-}
-window.openSlipModal = openSlipModal;
+document.getElementById('slip-lightbox')?.addEventListener('click', (e) => {
+  if (e.target.id === 'slip-lightbox') {
+    e.target.classList.add('hidden');
+  }
+});
 
 async function handleSlipFiles(files) {
   if (!files || !files.length) return;
@@ -914,6 +999,7 @@ async function handleSlipFiles(files) {
     return;
   }
 
+  openModal('slip-modal');
   slipQueue = Array.from(files);
   currentSlipIndex = 0;
   await processCurrentSlip();
@@ -926,7 +1012,7 @@ async function processCurrentSlip() {
   if (currentSlipIndex >= slipQueue.length) {
     revokeCurrentThumb();
     closeModal('slip-modal');
-    showToast(`สแกนและบันทึกสลิปเรียบร้อย (${slipQueue.length} ใบ) 🎉`);
+    showToast(`สแกนและบันทึกสลิปเรียบร้อย (${slipQueue.length} ใบ)`);
     isProcessingSlip = false;
     refreshPage();
     return;
@@ -958,11 +1044,8 @@ async function processCurrentSlip() {
   const rawFile = slipQueue[currentSlipIndex];
 
   try {
-    // 1. Client-side compress & downscale to <250KB JPEG
-    // Eliminates mobile memory exhaustion, prevents blank image render, and speeds up upload 10x
     const compressedBlob = await compressImage(rawFile, 1280, 0.82);
 
-    // 2. Set thumbnail from compressed blob and manage object URL lifecycle
     revokeCurrentThumb();
     const thumbImg = document.getElementById('slip-thumb-img');
     if (thumbImg) {
@@ -970,7 +1053,6 @@ async function processCurrentSlip() {
       thumbImg.src = currentThumbUrl;
     }
 
-    // 3. Send lightweight compressed blob to Gemini Flash Vision API
     const apiKey = getGeminiKey();
     const parsed = await parseSlipImage(compressedBlob, apiKey);
     currentParsedData = parsed;
@@ -1013,13 +1095,10 @@ async function populateSlipPreview(parsed) {
   if (slipAdvBox) slipAdvBox.classList.add('hidden');
   if (slipAdvInput) slipAdvInput.value = '';
 
-  const accSelect  = document.getElementById('slip-account');
   const fromSelect = document.getElementById('slip-from-account');
   const toSelect   = document.getElementById('slip-to-account');
+  const accOptions = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 
-  const accOptions = accounts.map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`).join('');
-
-  if (accSelect)  accSelect.innerHTML  = accOptions;
   if (fromSelect) fromSelect.innerHTML = accOptions;
   if (toSelect) {
     toSelect.innerHTML = accOptions;
@@ -1027,28 +1106,23 @@ async function populateSlipPreview(parsed) {
   }
 
   const habitData = getHabitData();
-  const matchedAccId = matchBankToAccount(parsed.bank, accounts, habitData);
-  if (matchedAccId) {
-    if (accSelect)  accSelect.value  = matchedAccId;
-    if (fromSelect) fromSelect.value = matchedAccId;
-  }
+  const matchedAccId = matchBankToAccount(parsed.bank, accounts, habitData) || accounts[0]?.id;
+  renderChipSelector('slip-account-chips', 'slip-account', accounts, matchedAccId, 'credit-card');
+  if (matchedAccId && fromSelect) fromSelect.value = matchedAccId;
 
-  // Set detected or default type
   const initialType = parsed.type === 'income' ? 'income' : 'expense';
-  setSlipType(initialType);
-
-  // Suggest category for current type
   const filteredCats = categories.filter(c => c.type === initialType || c.type === 'both');
-  const catSelect = document.getElementById('slip-category');
-  if (catSelect && filteredCats.length) {
-    const suggestedCatId = suggestCategory({
+  let suggestedCatId = filteredCats[0]?.id;
+  if (filteredCats.length) {
+    suggestedCatId = suggestCategory({
       memo: parsed.memo,
       bankCategoryTag: parsed.bankCategoryTag,
       payeeKey: parsed.payeeAccount,
       categories: filteredCats,
-    });
-    if (suggestedCatId) catSelect.value = suggestedCatId;
+    }) || filteredCats[0]?.id;
   }
+
+  setSlipType(initialType, suggestedCatId);
 
   const amountInput = document.getElementById('slip-amount');
   const dateInput   = document.getElementById('slip-date');
@@ -1062,7 +1136,6 @@ async function populateSlipPreview(parsed) {
   document.getElementById('slip-preview-section')?.classList.remove('hidden');
 }
 
-// Slip Form Submit (Confirm and Save)
 document.getElementById('slip-confirm-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (isProcessingSlip) return;
@@ -1170,7 +1243,6 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
     await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
     syncTransaction(tx).catch(console.error);
 
-    // Train habit engine on confirmed categorization and dynamic bank-to-account mapping
     if (!isAdv && categoryId) {
       learnHabit({
         memo: note,
@@ -1183,13 +1255,12 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
   }
 
   updateSyncWidget('synced');
-  showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว ✓`);
+  showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว`);
 
   currentSlipIndex++;
   await processCurrentSlip();
 });
 
-// Skip button
 document.getElementById('btn-slip-skip')?.addEventListener('click', async () => {
   if (isProcessingSlip) return;
   const saveBtn = document.getElementById('btn-slip-save');
@@ -1202,8 +1273,8 @@ document.getElementById('btn-slip-skip')?.addEventListener('click', async () => 
   await processCurrentSlip();
 });
 
-// File upload triggers & Drag-and-Drop
-document.getElementById('btn-browse-slips')?.addEventListener('click', () => {
+document.getElementById('btn-browse-slips')?.addEventListener('click', (e) => {
+  e.stopPropagation();
   document.getElementById('slip-file-input')?.click();
 });
 
@@ -1216,7 +1287,7 @@ document.getElementById('slip-file-input')?.addEventListener('change', (e) => {
 const slipDropzone = document.getElementById('slip-dropzone');
 if (slipDropzone) {
   slipDropzone.addEventListener('click', (e) => {
-    if (e.target.id !== 'btn-browse-slips') {
+    if (!e.target.closest('#btn-browse-slips')) {
       document.getElementById('slip-file-input')?.click();
     }
   });
@@ -1264,7 +1335,7 @@ window.openAccountModal = async function(accountId = null) {
     document.getElementById('account-name').value    = acc.name;
     document.getElementById('account-balance').value = (acc.initialBalanceMinor / 100).toFixed(2);
     document.getElementById('account-hidden-check').checked = !!acc.hidden;
-    setIconPicker('account-icon-picker', acc.icon || '💳');
+    setIconPicker('account-icon-picker', acc.icon || 'credit-card');
   } else {
     titleEl.textContent = 'เพิ่มบัญชี';
     deleteBtn.classList.add('hidden');
@@ -1273,7 +1344,7 @@ window.openAccountModal = async function(accountId = null) {
     document.getElementById('account-name').value    = '';
     document.getElementById('account-balance').value = '0';
     document.getElementById('account-hidden-check').checked = false;
-    setIconPicker('account-icon-picker', '💳');
+    setIconPicker('account-icon-picker', 'credit-card');
   }
   openModal('account-modal');
 };
@@ -1284,7 +1355,7 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
   const data = {
     name:                document.getElementById('account-name').value.trim(),
     initialBalanceMinor: parseAmount(document.getElementById('account-balance').value),
-    icon:                getSelectedIcon('account-icon-picker'),
+    icon:                getSelectedIcon('account-icon-picker', 'credit-card'),
     hidden:              document.getElementById('account-hidden-check').checked,
   };
 
@@ -1320,7 +1391,6 @@ document.getElementById('btn-delete-account')?.addEventListener('click', async (
   showToast('ลบบัญชีแล้ว');
   refreshPage();
 });
-
 
 document.getElementById('btn-archive-account')?.addEventListener('click', async () => {
   const editId = document.getElementById('account-id').value;
@@ -1361,14 +1431,14 @@ window.openCategoryModal = async function(catId = null) {
     document.getElementById('category-name').value = cat.name;
     const radio = document.querySelector(`input[name="cat-type"][value="${cat.type}"]`);
     if (radio) radio.checked = true;
-    setIconPicker('category-icon-picker', cat.icon || '📦');
+    setIconPicker('category-icon-picker', cat.icon || 'box');
   } else {
     titleEl.textContent = 'เพิ่มหมวดหมู่';
     deleteBtn.classList.add('hidden');
     idInput.value = '';
     document.getElementById('category-name').value = '';
     document.querySelector('input[name="cat-type"][value="expense"]').checked = true;
-    setIconPicker('category-icon-picker', '📦');
+    setIconPicker('category-icon-picker', 'box');
   }
   openModal('category-modal');
 };
@@ -1379,7 +1449,7 @@ document.getElementById('category-form')?.addEventListener('submit', async (e) =
   const data = {
     name: document.getElementById('category-name').value.trim(),
     type: document.querySelector('input[name="cat-type"]:checked')?.value || 'expense',
-    icon: getSelectedIcon('category-icon-picker'),
+    icon: getSelectedIcon('category-icon-picker', 'box'),
   };
 
   if (editId) {
@@ -1418,7 +1488,7 @@ document.getElementById('btn-delete-category')?.addEventListener('click', async 
 
 // ── Budget modal ──────────────────────────────────────────────
 
-window.openBudgetModal = async function(budgetId = null, defaultMonth = null) {
+window.openBudgetModal = async function(budgetId = null, defaultMonth = null, prefillCategoryId = null) {
   const titleEl    = document.getElementById('budget-modal-title');
   const idInput    = document.getElementById('budget-id');
   const deleteBtn  = document.getElementById('btn-delete-budget');
@@ -1426,8 +1496,8 @@ window.openBudgetModal = async function(budgetId = null, defaultMonth = null) {
   const monthGrp   = document.getElementById('grp-budget-month');
   const cats       = await store.getCategories('expense');
 
-  document.getElementById('budget-category').innerHTML =
-    cats.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
+  const catSel = document.getElementById('budget-category');
+  catSel.innerHTML = cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
   const toggleMonthField = () => {
     const noMonth = noMonthCb.checked;
@@ -1443,7 +1513,7 @@ window.openBudgetModal = async function(budgetId = null, defaultMonth = null) {
     if (!b) return;
     titleEl.textContent = 'แก้ไขงบประมาณ';
     idInput.value = b.id;
-    document.getElementById('budget-category').value = b.categoryId;
+    catSel.value = b.categoryId;
     const isTemplate = b.month == null;
     noMonthCb.checked = isTemplate;
     if (!isTemplate) document.getElementById('budget-month').value = b.month;
@@ -1452,6 +1522,9 @@ window.openBudgetModal = async function(budgetId = null, defaultMonth = null) {
   } else {
     titleEl.textContent = 'ตั้งงบประมาณ';
     idInput.value = '';
+    if (prefillCategoryId && cats.some(c => c.id === prefillCategoryId)) {
+      catSel.value = prefillCategoryId;
+    }
     noMonthCb.checked = false;
     document.getElementById('budget-month').value = defaultMonth || currentMonth();
     document.getElementById('budget-limit').value = '';
@@ -1482,7 +1555,7 @@ document.getElementById('budget-form')?.addEventListener('submit', async (e) => 
   const monthVal  = noMonth ? null : document.getElementById('budget-month').value;
 
   if (!noMonth && !monthVal) {
-    showToast('กรุณาระบุเดือน หรือเลือก "ใช้ทุกเดือน"', 'error');
+    showToast('กรุณาระบุเดือน หรือเลือก "ใช้เป็นงบมาตรฐานทุกเดือน"', 'error');
     return;
   }
 
@@ -1499,7 +1572,6 @@ document.getElementById('budget-form')?.addEventListener('submit', async (e) => 
     await store.addToPendingQueue({ id: editId, store: 'budgets', op: 'update' });
     syncBudget(existing).catch(console.error);
   } else {
-    // Check if budget for same category and month already exists
     const allBudgets = await store.getAll('budgets');
     const duplicate = allBudgets.find(b => !b.deletedAt && b.categoryId === data.categoryId && b.month === data.month);
     if (duplicate) {
@@ -1536,10 +1608,10 @@ window.openSubscriptionModal = async function(subId = null) {
   ]);
 
   document.getElementById('sub-account').innerHTML =
-    accounts.map(a => `<option value="${a.id}">${a.icon || ''} ${a.name}</option>`).join('');
+    accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 
   document.getElementById('sub-category').innerHTML =
-    categories.map(c => `<option value="${c.id}">${c.icon || ''} ${c.name}</option>`).join('');
+    categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
   if (subId) {
     const all = getSubscriptions();
@@ -1553,7 +1625,7 @@ window.openSubscriptionModal = async function(subId = null) {
     document.getElementById('sub-account').value = sub.accountId;
     document.getElementById('sub-category').value = sub.categoryId;
     document.getElementById('sub-note').value = sub.note || '';
-    setIconPicker('sub-icon-picker', sub.icon || '🎬');
+    setIconPicker('sub-icon-picker', sub.icon || 'tv');
     deleteBtn.classList.remove('hidden');
   } else {
     titleEl.textContent = 'เพิ่มรายจ่ายประจำ';
@@ -1562,7 +1634,7 @@ window.openSubscriptionModal = async function(subId = null) {
     document.getElementById('sub-amount').value = '';
     document.getElementById('sub-due-day').value = new Date().getDate();
     document.getElementById('sub-note').value = '';
-    setIconPicker('sub-icon-picker', '🎬');
+    setIconPicker('sub-icon-picker', 'tv');
     deleteBtn.classList.add('hidden');
   }
 
@@ -1578,7 +1650,7 @@ document.getElementById('subscription-form')?.addEventListener('submit', async (
   const accountId = document.getElementById('sub-account').value;
   const categoryId = document.getElementById('sub-category').value;
   const note = document.getElementById('sub-note').value.trim();
-  const icon = getSelectedIcon('sub-icon-picker');
+  const icon = getSelectedIcon('sub-icon-picker', 'tv');
 
   if (!name) {
     showToast('กรุณาระบุชื่อรายการ', 'error');
@@ -1602,7 +1674,7 @@ document.getElementById('subscription-form')?.addEventListener('submit', async (
   });
 
   closeModal('subscription-modal');
-  showToast(editId ? 'แก้ไขรายจ่ายประจำแล้ว' : 'เพิ่มรายจ่ายประจำแล้ว ✓');
+  showToast(editId ? 'แก้ไขรายจ่ายประจำแล้ว' : 'เพิ่มรายจ่ายประจำแล้ว');
   refreshPage();
 });
 
@@ -1624,10 +1696,9 @@ window.paySubscription = async (subId) => {
 };
 
 
-// ── Settings page ─────────────────────────────────────────────
+// ── Settings page (Zero-Emoji Minimalist UI) ─────────────────
 
 async function initSettings(container) {
-  const cfg = getConfig() || {};
   const supaCfg = getSupabaseConfig();
 
   container.innerHTML = `
@@ -1635,92 +1706,25 @@ async function initSettings(container) {
       <h1 class="page-title">ตั้งค่า</h1>
     </div>
     <div class="page-body">
-      <!-- Supabase Cloud Sync Card -->
-      <div class="card" style="max-width:480px">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <h3 class="card-title" style="margin:0">Supabase Cloud Sync (PostgreSQL)</h3>
-          <span class="badge badge-income">Auto-Sync ⚡</span>
-        </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
-          บันทึกและซิงค์ข้อมูลบนคลาวด์อัตโนมัติ รวดเร็วระดับมิลลิวินาที ปลอดภัย และรีเฟรชไม่ทับข้อมูลเก่า
-        </p>
-        <form id="supabase-form" autocomplete="off" style="margin-top:12px">
-          <div class="field">
-            <label>Project URL</label>
-            <input type="text" id="s-supabase-url" value="${supaCfg.url}" placeholder="https://xxxx.supabase.co" />
-          </div>
-          <div class="field">
-            <label>Publishable / Anon Key</label>
-            <input type="password" id="s-supabase-key" value="${supaCfg.key}" placeholder="sb_publishable_..." />
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-            <button type="submit" class="btn-primary">บันทึก Supabase Key</button>
-            <button type="button" id="s-supabase-test" class="btn-ghost">ทดสอบการเชื่อมต่อ</button>
-          </div>
-          <div id="s-supabase-result" style="margin-top:10px;font-size:13px"></div>
-        </form>
-      </div>
-
-      <!-- Cloud Migration Card -->
-      <div class="card" style="max-width:480px;margin-top:16px">
-        <h3 class="card-title">จัดการข้อมูล Cloud (One-Click Migration)</h3>
-        <p style="margin-top:4px;font-size:12px;color:var(--text-muted)">
-          ส่งข้อมูลเดิมทั้งหมดในเครื่องขึ้น Supabase ทันที หรือดึงข้อมูลล่าสุดจาก Cloud
-        </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-          <button class="btn-primary" id="s-migrate-supabase" style="background:var(--income);border-color:var(--income)">
-            🚀 ส่งข้อมูลในเครื่องขึ้น Supabase (Migration)
-          </button>
-          <button class="btn-ghost" id="s-pull-supabase">
-            🔄 ดึงข้อมูลล่าสุดจาก Supabase (Pull)
-          </button>
-        </div>
-        <div id="s-migrate-result" style="margin-top:10px;font-size:13px"></div>
-      </div>
-
-      <div class="card" style="max-width:480px;margin-top:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <h3 class="card-title" style="margin:0">AI สแกนสลิป (Gemini Vision)</h3>
-          <span class="badge ${getGeminiKey() ? 'badge-income' : 'badge-neutral'}">
-            ${getGeminiKey() ? 'พร้อมใช้งาน' : 'ยังไม่ได้ตั้งค่า'}
-          </span>
-        </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
-          สกัดยอดเงิน วันที่ และบันทึกช่วยจำจากสลิปโอนเงิน (ฟรี 1,500 ครั้ง/วัน ผ่าน Google AI Studio)
-        </p>
-        <form id="gemini-key-form" autocomplete="off" style="margin-top:10px">
-          <div class="field">
-            <label>Gemini API Key</label>
-            <input type="password" id="s-gemini-key" value="${getGeminiKey()}" placeholder="AIzaSy..." />
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-            <button type="submit" class="btn-primary">บันทึก Key</button>
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="btn-ghost" style="font-size:12px;text-decoration:none">
-              รับ API Key ฟรี ↗
-            </a>
-          </div>
-        </form>
-      </div>
-      <div class="card" style="max-width:480px;margin-top:16px">
-        <h3 class="card-title">ธีม & ลักษณะ</h3>
-        <div class="toggle-row">
-          <span class="toggle-label">Dark Mode</span>
+      <!-- Theme & Appearance Card -->
+      <div class="card" style="max-width:520px">
+        <h3 class="card-title">ธีม & การแสดงผล</h3>
+        <div class="toggle-row" style="margin-top:8px">
+          <span class="toggle-label">โหมดมืด (Dark Mode)</span>
           <label class="toggle-switch">
             <input type="checkbox" id="s-dark-mode" ${localStorage.getItem(DARK_KEY) === '1' ? 'checked' : ''}>
             <span class="toggle-knob"></span>
           </label>
         </div>
-        <div style="margin-top:14px;font-size:12px;color:var(--text-muted);margin-bottom:8px">สีหลัก</div>
+        <div style="margin-top:14px;font-size:12px;color:var(--text-muted);margin-bottom:8px">สีหลักของระบบ</div>
         <div class="theme-picker" id="s-theme-picker">
           ${THEMES.map(t => `
-            <button type="button" class="theme-swatch ${(localStorage.getItem(THEME_KEY) || 'teal') === t.id ? 'selected' : ''}" data-theme-id="${t.id}" style="background:${t.color}" title="${t.name}">
+            <button type="button" class="theme-swatch ${(localStorage.getItem(THEME_KEY) || 'mono') === t.id ? 'selected' : ''}" data-theme-id="${t.id}" style="background:${t.color}" title="${t.name}">
               <span class="theme-check">✓</span>
             </button>
           `).join('')}
         </div>
-      </div>
-      <div class="card" style="max-width:480px;margin-top:16px">
-        <h3 class="card-title">ฟอนต์</h3>
+        <div style="margin-top:16px;font-size:12px;color:var(--text-muted);margin-bottom:8px">แบบอักษร (Font)</div>
         <div class="font-picker" id="s-font-picker">
           ${FONTS.map(f => `
             <button type="button" class="font-option ${(localStorage.getItem(FONT_KEY) || 'dm-sans') === f.id ? 'selected' : ''}" data-font-id="${f.id}" style="font-family:${f.css}">
@@ -1730,36 +1734,96 @@ async function initSettings(container) {
           `).join('')}
         </div>
       </div>
-      <!-- Complete JSON Vault Backup & Restore -->
-      <div class="card" style="max-width:480px;margin-top:16px">
+
+      <!-- AI Slip Scanner (Gemini Vision) -->
+      <div class="card" style="max-width:520px;margin-top:12px">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <h3 class="card-title" style="margin:0">สำรองและกู้คืนข้อมูล (Vault Backup)</h3>
-          <span class="badge badge-neutral">Full JSON 🛡️</span>
+          <h3 class="card-title" style="margin:0">AI สแกนสลิป (Gemini Vision)</h3>
+          <span class="badge ${getGeminiKey() ? 'badge-income' : 'badge-neutral'}">
+            ${getGeminiKey() ? 'พร้อมใช้งาน' : 'ยังไม่ตั้งค่า'}
+          </span>
         </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
-          สำรองข้อมูลทั้งหมด (บัญชี, หมวดหมู่, งบประมาณ, รายการธุรกรรม, รายจ่ายประจำ และ Habit Engine) เก็บไว้เป็นไฟล์ .json และกู้คืนได้ทุกเมื่อ
+        <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">
+          อ่านยอดเงิน วันที่ และบันทึกช่วยจำจากสลิปธนาคารอัตโนมัติ (ฟรีผ่าน Google AI Studio)
         </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-          <button class="btn-primary" id="s-backup-json" style="background:var(--primary);border-color:var(--primary)">
-            📥 ดาวน์โหลดข้อมูลทั้งหมด (.json)
-          </button>
-          <button class="btn-ghost" id="s-restore-json">
-            📤 กู้คืนข้อมูลจากไฟล์ (.json)
-          </button>
-          <input type="file" id="s-restore-input" accept=".json,application/json" class="hidden" />
+        <form id="gemini-key-form" autocomplete="off" style="margin-top:10px">
+          <div class="field">
+            <label>Gemini API Key</label>
+            <input type="password" id="s-gemini-key" value="${getGeminiKey()}" placeholder="AIzaSy..." />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <button type="submit" class="btn-primary btn-sm">บันทึก Key</button>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="btn-ghost btn-sm" style="text-decoration:none">
+              รับ API Key ฟรี ↗
+            </a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Supabase Cloud Sync Card -->
+      <div class="card" style="max-width:520px;margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h3 class="card-title" style="margin:0">Supabase Cloud Sync</h3>
+          <span class="badge badge-income">Auto-Sync</span>
+        </div>
+        <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">
+          ซิงค์ข้อมูลข้ามอุปกรณ์แบบเรียลไทม์บน PostgreSQL
+        </p>
+        <form id="supabase-form" autocomplete="off" style="margin-top:10px">
+          <div class="field">
+            <label>Project URL</label>
+            <input type="text" id="s-supabase-url" value="${supaCfg.url}" placeholder="https://xxxx.supabase.co" />
+          </div>
+          <div class="field">
+            <label>Publishable / Anon Key</label>
+            <input type="password" id="s-supabase-key" value="${supaCfg.key}" placeholder="sb_publishable_..." />
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button type="submit" class="btn-primary btn-sm">บันทึกการตั้งค่า</button>
+            <button type="button" id="s-supabase-test" class="btn-ghost btn-sm">ทดสอบการเชื่อมต่อ</button>
+          </div>
+          <div id="s-supabase-result" style="margin-top:10px;font-size:13px"></div>
+        </form>
+
+        <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">จัดการข้อมูล Cloud</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn-ghost btn-sm" id="s-migrate-supabase">
+              ${renderIcon('upload', 14)} ส่งข้อมูลในเครื่องขึ้น Cloud
+            </button>
+            <button type="button" class="btn-ghost btn-sm" id="s-pull-supabase">
+              ${renderIcon('download', 14)} ดึงข้อมูลล่าสุดจาก Cloud
+            </button>
+          </div>
+          <div id="s-migrate-result" style="margin-top:8px;font-size:12px"></div>
         </div>
       </div>
 
-      <div class="card" style="max-width:480px;margin-top:16px">
-        <h3 class="card-title">ส่งออกและจัดการข้อมูล</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn-ghost" id="s-export-all">Export ข้อมูลเป็น Excel (.xlsx)</button>
-          <button class="btn-ghost" id="s-pull-all">ดึงข้อมูลจาก GitHub</button>
-          <button class="btn-danger" id="s-clear-cache">ล้างข้อมูลใน Cache</button>
+      <!-- Complete JSON Vault Backup & Restore + Excel Export -->
+      <div class="card" style="max-width:520px;margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h3 class="card-title" style="margin:0">สำรองและส่งออกข้อมูล</h3>
+          <span class="badge badge-neutral">JSON & Excel</span>
         </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
-          "ดึงข้อมูลจาก GitHub" ใช้เมื่อเปิดแอปใน browser/device ใหม่ เพื่อโหลดข้อมูลทั้งหมดลงมา
+        <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">
+          สำรองข้อมูลทั้งหมด (บัญชี, หมวดหมู่, งบประมาณ, รายการ, บิลประจำ และ Habit Engine) หรือส่งออกเป็นไฟล์ Excel
         </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button type="button" class="btn-primary btn-sm" id="s-backup-json">
+            ${renderIcon('download', 14)} สำรองข้อมูล (.json)
+          </button>
+          <button type="button" class="btn-ghost btn-sm" id="s-restore-json">
+            ${renderIcon('upload', 14)} กู้คืนจากไฟล์ (.json)
+          </button>
+          <button type="button" class="btn-ghost btn-sm" id="s-export-all">
+            Export Excel (.xlsx)
+          </button>
+          <input type="file" id="s-restore-input" accept=".json,application/json" class="hidden" />
+        </div>
+        <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn-ghost btn-sm" id="s-pull-all">ดึงข้อมูลจาก GitHub</button>
+          <button type="button" class="btn-danger btn-sm" id="s-clear-cache">ล้างข้อมูลในเครื่อง</button>
+        </div>
       </div>
     </div>
   `;
@@ -1769,19 +1833,19 @@ async function initSettings(container) {
     const url = document.getElementById('s-supabase-url').value.trim();
     const key = document.getElementById('s-supabase-key').value.trim();
     saveSupabaseConfig(url, key);
-    showToast('บันทึกการตั้งค่า Supabase แล้ว ⚡');
+    showToast('บันทึกการตั้งค่า Supabase แล้ว');
   });
 
   document.getElementById('s-supabase-test')?.addEventListener('click', async () => {
     const resEl = document.getElementById('s-supabase-result');
     resEl.textContent = 'กำลังทดสอบเชื่อมต่อ...';
-    resEl.style.color = 'var(--primary)';
+    resEl.style.color = 'var(--text-secondary)';
     const r = await testSupabaseConnection();
     if (r.ok) {
-      resEl.textContent = '✓ เชื่อมต่อกับ Supabase สำเร็จ พร้อมใช้งาน!';
+      resEl.textContent = 'เชื่อมต่อกับ Supabase สำเร็จ พร้อมใช้งาน';
       resEl.style.color = 'var(--income)';
     } else {
-      resEl.textContent = `✗ ล้มเหลว: ${r.error || 'HTTP ' + r.status}`;
+      resEl.textContent = `เชื่อมต่อไม่สำเร็จ: ${r.error || 'HTTP ' + r.status}`;
       resEl.style.color = 'var(--expense)';
     }
   });
@@ -1794,15 +1858,15 @@ async function initSettings(container) {
     if (!ok) return;
     const resEl = document.getElementById('s-migrate-result');
     resEl.textContent = 'กำลังส่งข้อมูลขึ้น Supabase...';
-    resEl.style.color = 'var(--primary)';
+    resEl.style.color = 'var(--text-secondary)';
     try {
       const stats = await migrateAllToSupabase(store);
-      resEl.textContent = `✓ ส่งข้อมูลสำเร็จ: ${stats.accounts} บัญชี, ${stats.categories} หมวดหมู่, ${stats.budgets} งบประมาณ, ${stats.transactions} รายการ`;
+      resEl.textContent = `ส่งข้อมูลสำเร็จ: ${stats.accounts} บัญชี, ${stats.categories} หมวดหมู่, ${stats.budgets} งบประมาณ, ${stats.transactions} รายการ`;
       resEl.style.color = 'var(--income)';
-      showToast('ส่งข้อมูลขึ้น Supabase สำเร็จทั้งหมดแล้ว! 🎉');
+      showToast('ส่งข้อมูลขึ้น Supabase สำเร็จ');
       updateSyncWidget('synced');
     } catch (err) {
-      resEl.textContent = `✗ ล้มเหลว: ${err.message}`;
+      resEl.textContent = `ล้มเหลว: ${err.message}`;
       resEl.style.color = 'var(--expense)';
       showToast('เกิดข้อผิดพลาดในการส่งข้อมูล: ' + err.message, 'error');
     }
@@ -1813,14 +1877,13 @@ async function initSettings(container) {
     const result = await pullAllFromSupabase(store);
     if (result.ok) {
       updateSyncWidget('synced');
-      showToast(`ดึงข้อมูลจาก Supabase สำเร็จ (${result.count} รายการ) ⚡`);
+      showToast(`ดึงข้อมูลจาก Supabase สำเร็จ (${result.count} รายการ)`);
       navigate(currentPage);
     } else {
       updateSyncWidget('error');
       showToast('ดึงข้อมูลไม่สำเร็จ: ' + result.error, 'error');
     }
   });
-
 
   document.getElementById('gemini-key-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1830,11 +1893,11 @@ async function initSettings(container) {
     initSettings(container);
   });
 
-  document.getElementById('s-dark-mode').addEventListener('change', (e) => {
+  document.getElementById('s-dark-mode')?.addEventListener('change', (e) => {
     applyDarkMode(e.target.checked);
   });
 
-  document.getElementById('s-theme-picker').addEventListener('click', (e) => {
+  document.getElementById('s-theme-picker')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-theme-id]');
     if (!btn) return;
     const themeId = btn.dataset.themeId;
@@ -1844,7 +1907,7 @@ async function initSettings(container) {
     });
   });
 
-  document.getElementById('s-font-picker').addEventListener('click', (e) => {
+  document.getElementById('s-font-picker')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-font-id]');
     if (!btn) return;
     const fontId = btn.dataset.fontId;
@@ -1852,24 +1915,6 @@ async function initSettings(container) {
     document.querySelectorAll('#s-font-picker .font-option').forEach(el => {
       el.classList.toggle('selected', el.dataset.fontId === fontId);
     });
-  });
-
-  document.getElementById('s-test')?.addEventListener('click', async () => {
-    const result = document.getElementById('s-result');
-    if (!result) return;
-    result.textContent = 'กำลังทดสอบ...';
-    const r = await syncer.testConnection();
-    result.textContent = r.ok ? '✓ เชื่อมต่อสำเร็จ' : `✗ ${r.error}`;
-    result.style.color = r.ok ? 'var(--income)' : 'var(--expense)';
-  });
-
-  document.getElementById('s-clear')?.addEventListener('click', async () => {
-    const ok = await showConfirm('ลบ Token', 'ต้องการลบ GitHub token ออกจากเครื่องนี้หรือไม่?');
-    if (!ok) return;
-    const { clearConfig } = await import('./settings.js');
-    clearConfig();
-    showToast('ลบ token แล้ว');
-    navigate('settings');
   });
 
   document.getElementById('s-pull-all')?.addEventListener('click', async () => {
@@ -1887,12 +1932,10 @@ async function initSettings(container) {
     }
   });
 
-
-  // Full JSON Backup & Restore handlers
   document.getElementById('s-backup-json')?.addEventListener('click', async () => {
     try {
       const meta = await exportFullJsonBackup(store);
-      showToast(`ดาวน์โหลดไฟล์สำรองเรียบร้อย (${meta.counts.transactions} รายการ, ${meta.counts.accounts} บัญชี) 🛡️`);
+      showToast(`ดาวน์โหลดไฟล์สำรองเรียบร้อย (${meta.counts.transactions} รายการ)`);
     } catch (err) {
       showToast('เกิดข้อผิดพลาดในการสำรองข้อมูล: ' + err.message, 'error');
     }
@@ -1917,7 +1960,7 @@ async function initSettings(container) {
     try {
       const text = await file.text();
       const res = await importFullJsonBackup(text, store);
-      showToast(`กู้คืนข้อมูลสำเร็จ! (${res.txCount} รายการ, ${res.accCount} บัญชี, ${res.subCount} รายจ่ายประจำ) ✅`);
+      showToast(`กู้คืนข้อมูลสำเร็จ (${res.txCount} รายการ, ${res.accCount} บัญชี)`);
       setTimeout(() => location.reload(), 900);
     } catch (err) {
       showToast('กู้คืนข้อมูลไม่สำเร็จ: ' + err.message, 'error');
@@ -1926,7 +1969,7 @@ async function initSettings(container) {
     }
   });
 
-  document.getElementById('s-export-all').addEventListener('click', async () => {
+  document.getElementById('s-export-all')?.addEventListener('click', async () => {
     const [txs, activeAccs, archivedAccs, cats, budgets] = await Promise.all([
       store.getTransactions({}),
       store.getAccounts(),
@@ -1937,19 +1980,35 @@ async function initSettings(container) {
     exportTransactions(txs, [...activeAccs, ...archivedAccs], cats, budgets, 'finance-tracker-export');
   });
 
-  document.getElementById('s-clear-cache').addEventListener('click', async () => {
+  document.getElementById('s-clear-cache')?.addEventListener('click', async () => {
     const ok = await showConfirm('ล้างข้อมูล', 'ข้อมูลทั้งหมดในเครื่องจะถูกลบ ดำเนินการต่อ?');
     if (!ok) return;
     const dbs = await indexedDB.databases?.() || [];
     for (const db of dbs) {
       if (db.name === 'finance_tracker_v2') indexedDB.deleteDatabase(db.name);
     }
-    showToast('ล้างข้อมูลแล้ว กำลัง reload...');
+    showToast('ล้างข้อมูลแล้ว กำลังโหลดใหม่...');
     setTimeout(() => location.reload(), 1000);
   });
 }
 
-// ── Icon picker ───────────────────────────────────────────────
+// ── SVG Icon Pickers ──────────────────────────────────────────
+
+function renderIconPicker(pickerId, iconKeys) {
+  const picker = document.getElementById(pickerId);
+  if (!picker) return;
+  picker.innerHTML = iconKeys.map((key, idx) => `
+    <button type="button" class="icon-opt ${idx === 0 ? 'selected' : ''}" data-icon="${key}" title="${key}">
+      ${renderIcon(key, 18)}
+    </button>
+  `).join('');
+}
+
+function initAllIconPickers() {
+  renderIconPicker('account-icon-picker', ACCOUNT_ICON_KEYS);
+  renderIconPicker('category-icon-picker', CATEGORY_ICON_KEYS);
+  renderIconPicker('sub-icon-picker', SUB_ICON_KEYS);
+}
 
 document.addEventListener('click', (e) => {
   const opt = e.target.closest('.icon-opt');
@@ -1960,17 +2019,25 @@ document.addEventListener('click', (e) => {
   opt.classList.add('selected');
 });
 
-function setIconPicker(pickerId, icon) {
+function setIconPicker(pickerId, iconOrEmoji) {
   const picker = document.getElementById(pickerId);
   if (!picker) return;
+  const normalized = normalizeIconKey(iconOrEmoji, picker.querySelector('.icon-opt')?.dataset.icon || 'box');
+  let matched = false;
   picker.querySelectorAll('.icon-opt').forEach(o => {
-    o.classList.toggle('selected', o.dataset.icon === icon);
+    const isMatch = o.dataset.icon === normalized;
+    o.classList.toggle('selected', isMatch);
+    if (isMatch) matched = true;
   });
+  if (!matched) {
+    const first = picker.querySelector('.icon-opt');
+    if (first) first.classList.add('selected');
+  }
 }
 
-function getSelectedIcon(pickerId) {
+function getSelectedIcon(pickerId, fallback = 'box') {
   const picker = document.getElementById(pickerId);
-  return picker?.querySelector('.icon-opt.selected')?.dataset.icon || '📦';
+  return picker?.querySelector('.icon-opt.selected')?.dataset.icon || fallback;
 }
 
 // ── Modal helpers ─────────────────────────────────────────────
@@ -1986,10 +2053,10 @@ function closeModal(id) {
   if (id === 'slip-modal') {
     revokeCurrentThumb();
     isProcessingSlip = false;
+    document.getElementById('slip-lightbox')?.classList.add('hidden');
   }
 }
 
-// Close on backdrop click or [data-close] buttons (modals live outside #main-app)
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-overlay')) {
     e.target.classList.add('hidden');
@@ -1997,6 +2064,7 @@ document.addEventListener('click', (e) => {
     if (e.target.id === 'slip-modal') {
       revokeCurrentThumb();
       isProcessingSlip = false;
+      document.getElementById('slip-lightbox')?.classList.add('hidden');
     }
     return;
   }
@@ -2006,9 +2074,13 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ESC key closes modals
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    const lightbox = document.getElementById('slip-lightbox');
+    if (lightbox && !lightbox.classList.contains('hidden')) {
+      lightbox.classList.add('hidden');
+      return;
+    }
     document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => {
       m.classList.add('hidden');
       if (m.id === 'slip-modal') {
@@ -2138,7 +2210,6 @@ function hideCalc() {
 }
 
 document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
-  // Close on backdrop tap
   if (e.target === document.getElementById('calc-overlay')) { hideCalc(); return; }
 
   const btn = e.target.closest('[data-calc]');
@@ -2161,7 +2232,6 @@ document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
     hideCalc();
     return;
   } else {
-    // Prevent double operators
     const ops = ['+', '-', '×'];
     if (ops.includes(key) && ops.includes(_calcExpr.slice(-1))) {
       _calcExpr = _calcExpr.slice(0, -1) + key;
@@ -2173,7 +2243,6 @@ document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
   display.textContent = _calcExpr || '0';
 });
 
-// Intercept focus on any [data-calculator] input
 document.addEventListener('focusin', e => {
   const input = e.target;
   if (input.tagName === 'INPUT' && 'calculator' in input.dataset) {
@@ -2181,8 +2250,6 @@ document.addEventListener('focusin', e => {
     showCalc(input);
   }
 }, true);
-
-// ── Expose openTxModal for pages ──────────────────────────────
 
 export { openTxModal };
 

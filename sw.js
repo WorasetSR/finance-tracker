@@ -1,4 +1,4 @@
-const CACHE = 'ft-v3.5';
+const CACHE = 'ft-v4.0';
 
 const SHELL = [
   './',
@@ -6,6 +6,7 @@ const SHELL = [
   './manifest.json',
   './icon.svg',
   './css/style.css',
+  './js/icons.js',
   './js/app.js',
   './js/local-store.js',
   './js/schema.js',
@@ -23,7 +24,6 @@ const SHELL = [
   './js/pages/analytics.js',
   './js/pages/accounts.js',
 ];
-
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));

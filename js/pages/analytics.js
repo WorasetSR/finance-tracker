@@ -1,11 +1,12 @@
 // ─────────────────────────────────────────────────────────────
-//  pages/analytics.js — Advanced Financial Analytics & MoM
-//  Finance Tracker v2
+//  pages/analytics.js — Financial Analytics & MoM Trends
+//  Finance Tracker v4.0 (Zero-Emoji SVG Icons)
 // ─────────────────────────────────────────────────────────────
 
-import { formatTHB, formatMonthShort, thaiMonthNames } from '../format.js';
+import { formatTHB, formatMonthShort } from '../format.js';
 import { currentMonth } from '../schema.js';
 import { getSubscriptions } from '../subscriptions.js';
+import { renderIcon } from '../icons.js';
 
 let barChart    = null;
 let pieChart    = null;
@@ -14,7 +15,7 @@ let trendChart  = null;
 export async function initAnalytics(container, store) {
   const endMonth  = currentMonth();
   const months    = last6Months(endMonth);
-  let catMonth    = endMonth;   // Month shown in category breakdown
+  let catMonth    = endMonth;
 
   async function renderPieSection() {
     const [categories, allTxs] = await Promise.all([
@@ -43,11 +44,11 @@ export async function initAnalytics(container, store) {
           <h2 class="card-title">รายจ่ายตามหมวดหมู่</h2>
           <div class="cat-month-nav">
             <button class="icon-btn" id="cat-prev-month" title="เดือนก่อน">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+              ${renderIcon('chevron-left', 14)}
             </button>
             <span class="cat-month-label">${formatMonthShort(catMonth)}</span>
             <button class="icon-btn" id="cat-next-month" title="เดือนถัดไป">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+              ${renderIcon('chevron-right', 14)}
             </button>
           </div>
         </div>
@@ -63,7 +64,7 @@ export async function initAnalytics(container, store) {
               return `
                 <div class="cat-bar-item">
                   <div class="cat-bar-header">
-                    <span class="cat-bar-name">${e.cat.icon || '📦'} ${e.cat.name}</span>
+                    <span class="cat-bar-name">${renderIcon(e.cat.icon || 'box', 14)} ${e.cat.name}</span>
                     <span class="cat-bar-val mono">${formatTHB(e.total)} <span class="cat-bar-pct">(${pct}%)</span></span>
                   </div>
                   <div class="cat-progress-bg">
@@ -100,10 +101,9 @@ export async function initAnalytics(container, store) {
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const monthData = await Promise.all(months.map(m => store.getMonthSummary(m)));
 
-    const curMonthData = monthData[monthData.length - 1]; // current active month (endMonth)
+    const curMonthData = monthData[monthData.length - 1];
     const prevMonthData = monthData[monthData.length - 2] || { income: 0, expense: 0, net: 0 };
 
-    // Month-over-Month calculation
     const expDiff = curMonthData.expense - prevMonthData.expense;
     const expPct = prevMonthData.expense > 0 ? Math.round((expDiff / prevMonthData.expense) * 100) : 0;
 
@@ -113,23 +113,22 @@ export async function initAnalytics(container, store) {
     const savingRates = monthData.map(d => d.income > 0 ? Math.round((d.net / d.income) * 100) : 0);
     const curSavingRate = savingRates[savingRates.length - 1];
 
-    let healthLabel = 'พอดีตัว';
+    let healthLabel = 'พอดีตัว (0-15%)';
     let healthClass = 'neutral';
     if (curSavingRate >= 30) {
-      healthLabel = 'ยอดเยี่ยม (>30%) 🌟';
+      healthLabel = 'ยอดเยี่ยม (>30%)';
       healthClass = 'better';
     } else if (curSavingRate >= 15) {
-      healthLabel = 'สุขภาพดี (15-30%) 🎯';
+      healthLabel = 'สุขภาพดี (15-30%)';
       healthClass = 'better';
     } else if (curSavingRate >= 0) {
-      healthLabel = 'พอดีตัว (0-15%) ⚖️';
+      healthLabel = 'พอดีตัว (0-15%)';
       healthClass = 'neutral';
     } else {
-      healthLabel = 'ติดลบ (เกินรายรับ) ⚠️';
+      healthLabel = 'ติดลบ (เกินรายรับ)';
       healthClass = 'worse';
     }
 
-    // Subscriptions fixed expenses
     const subs = getSubscriptions();
     const totalFixedMinor = subs.reduce((s, sub) => s + (sub.amountMinor || 0), 0);
     const fixedPct = curMonthData.expense > 0 ? Math.min(100, Math.round((totalFixedMinor / curMonthData.expense) * 100)) : 0;
@@ -189,18 +188,18 @@ export async function initAnalytics(container, store) {
 
         ${totalFixedMinor > 0 ? `
           <!-- Fixed vs Variable Expenses Ratio Card -->
-          <div class="card" style="margin-bottom:20px;padding:16px 18px">
+          <div class="card" style="margin-bottom:16px;padding:14px 16px">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-size:13px;font-weight:600;color:var(--text)">สัดส่วนรายจ่ายประจำคงที่ vs ผันแปร</span>
-              <span class="badge badge-neutral" style="font-size:11px">Subscriptions & Bills</span>
+              <span class="badge badge-neutral" style="font-size:11px">บิลประจำ</span>
             </div>
             <div class="fixed-ratio-bar">
-              <div class="fixed-ratio-fill" style="width:${fixedPct}%;background:#6366F1" title="รายจ่ายประจำ ${fixedPct}%"></div>
-              <div class="fixed-ratio-fill" style="width:${varPct}%;background:#14B8A6" title="รายจ่ายผันแปร ${varPct}%"></div>
+              <div class="fixed-ratio-fill" style="width:${fixedPct}%;background:var(--primary)" title="รายจ่ายประจำ ${fixedPct}%"></div>
+              <div class="fixed-ratio-fill" style="width:${varPct}%;background:var(--income)" title="รายจ่ายผันแปร ${varPct}%"></div>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary)">
-              <span><span style="color:#6366F1;font-weight:700">●</span> ประจำ: <span class="mono font-semibold">${formatTHB(totalFixedMinor)} (${fixedPct}%)</span></span>
-              <span><span style="color:#14B8A6;font-weight:700">●</span> ผันแปร: <span class="mono font-semibold">${formatTHB(Math.max(0, curMonthData.expense - totalFixedMinor))} (${varPct}%)</span></span>
+              <span>● ประจำ: <span class="mono font-semibold">${formatTHB(totalFixedMinor)} (${fixedPct}%)</span></span>
+              <span>● ผันแปร: <span class="mono font-semibold">${formatTHB(Math.max(0, curMonthData.expense - totalFixedMinor))} (${varPct}%)</span></span>
             </div>
           </div>
         ` : ''}
@@ -295,7 +294,7 @@ export async function initAnalytics(container, store) {
 
 // ── Charts ────────────────────────────────────────────────────
 
-const PIE_COLORS = ['#0D9488','#14B8A6','#2DD4BF','#5EEAD4','#6366F1','#8B5CF6','#EC4899','#F59E0B'];
+const PIE_COLORS = ['#18181B','#0D9488','#6366F1','#F59E0B','#EC4899','#3B82F6','#8B5CF6','#64748B'];
 
 function drawBarChart(months, data) {
   const canvas = document.getElementById('bar-chart');
@@ -334,7 +333,7 @@ function drawBarChart(months, data) {
       },
       scales: {
         x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 12 } } },
-        y: { grid: { color: '#F3F4F6' }, ticks: { font: { family: 'DM Mono', size: 11 }, callback: v => '฿' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) } },
+        y: { grid: { color: 'rgba(150, 150, 150, 0.1)' }, ticks: { font: { family: 'DM Mono', size: 11 }, callback: v => '฿' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) } },
       },
     },
   });
@@ -354,12 +353,12 @@ function drawPieChart(catBreakdown, totalExp) {
         data:            top.map(e => e.total / 100),
         backgroundColor: PIE_COLORS.slice(0, top.length),
         borderWidth:     2,
-        borderColor:     '#fff',
+        borderColor:     document.documentElement.dataset.theme === 'dark' ? '#121215' : '#ffffff',
         hoverOffset:     4,
       }],
     },
     options: {
-      cutout:   '65%',
+      cutout:   '68%',
       plugins:  {
         legend: { display: false },
         tooltip: {
@@ -371,7 +370,7 @@ function drawPieChart(catBreakdown, totalExp) {
           },
         },
       },
-      animation: { duration: 400 },
+      animation: { duration: 350 },
     },
   });
 }
@@ -406,7 +405,7 @@ function drawTrendChart(months, savingRates) {
       },
       scales: {
         x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 12 } } },
-        y: { grid: { color: '#F3F4F6' }, ticks: { font: { family: 'DM Mono', size: 11 }, callback: v => v + '%' } },
+        y: { grid: { color: 'rgba(150, 150, 150, 0.1)' }, ticks: { font: { family: 'DM Mono', size: 11 }, callback: v => v + '%' } },
       },
     },
   });

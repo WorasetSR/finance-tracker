@@ -28,14 +28,19 @@ export function genId(prefix) {
  */
 export function genClientId() {
   const KEY = 'ft_client_id';
-  let id = localStorage.getItem(KEY);
-  if (!id) {
-    const a = Math.random().toString(16).slice(2, 10);
-    const b = Math.random().toString(16).slice(2, 10);
-    id = `client_${a}${b}`;
-    localStorage.setItem(KEY, id);
-  }
-  return id;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      let id = localStorage.getItem(KEY);
+      if (!id) {
+        const a = Math.random().toString(16).slice(2, 10);
+        const b = Math.random().toString(16).slice(2, 10);
+        id = `client_${a}${b}`;
+        localStorage.setItem(KEY, id);
+      }
+      return id;
+    }
+  } catch {}
+  return 'client_node_default';
 }
 
 /** Current ISO datetime string. */
@@ -128,7 +133,7 @@ export function makeTransaction({
  */
 export function makeAccount({
   name,
-  icon                 = '💳',
+  icon                 = 'credit-card',
   initialBalanceMinor  = 0,
 } = {}) {
   const now = nowISO();
@@ -158,7 +163,7 @@ export function makeAccount({
  */
 export function makeCategory({
   name,
-  icon = '📦',
+  icon = 'box',
   type = 'expense',
 } = {}) {
   const now = nowISO();
@@ -216,7 +221,7 @@ export const DEFAULT_ACCOUNTS = [
   {
     id: 'acc_cash',
     name: 'เงินสด',
-    icon: '💵',
+    icon: 'banknote',
     initialBalanceMinor: 0,
     currency: 'THB',
     archived: false,
@@ -225,7 +230,7 @@ export const DEFAULT_ACCOUNTS = [
   {
     id: 'acc_bank',
     name: 'ธนาคาร',
-    icon: '🏦',
+    icon: 'landmark',
     initialBalanceMinor: 0,
     currency: 'THB',
     archived: false,
@@ -235,19 +240,19 @@ export const DEFAULT_ACCOUNTS = [
 
 export const DEFAULT_CATEGORIES = [
   // ── Expense ──────────────────────────────────────────────
-  { id: 'cat_food',      name: 'อาหาร',       icon: '🍔', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_travel',    name: 'เดินทาง',     icon: '🚗', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_shopping',  name: 'ช้อปปิ้ง',   icon: '🛍️', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_health',    name: 'สุขภาพ',      icon: '💊', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_entertain', name: 'บันเทิง',     icon: '🎮', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_housing',   name: 'ที่พัก',      icon: '🏠', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_education', name: 'การศึกษา',    icon: '📚', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_advance',   name: 'ออกให้คนอื่นก่อน', icon: '🤝', type: 'expense', ..._SEED_COMMON },
-  { id: 'cat_other_exp', name: 'อื่นๆ',       icon: '📦', type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_food',      name: 'อาหาร',       icon: 'utensils',     type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_travel',    name: 'เดินทาง',     icon: 'car',          type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_shopping',  name: 'ช้อปปิ้ง',   icon: 'shopping-bag', type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_health',    name: 'สุขภาพ',      icon: 'heart-pulse',  type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_entertain', name: 'บันเทิง',     icon: 'gamepad',      type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_housing',   name: 'ที่พัก',      icon: 'home',         type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_education', name: 'การศึกษา',    icon: 'book-open',    type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_advance',   name: 'ออกให้คนอื่นก่อน', icon: 'users',   type: 'expense', ..._SEED_COMMON },
+  { id: 'cat_other_exp', name: 'อื่นๆ',       icon: 'box',          type: 'expense', ..._SEED_COMMON },
   // ── Income ───────────────────────────────────────────────
-  { id: 'cat_salary',    name: 'เงินเดือน',    icon: '💼', type: 'income', ..._SEED_COMMON },
-  { id: 'cat_freelance', name: 'รายได้พิเศษ', icon: '💡', type: 'income', ..._SEED_COMMON },
-  { id: 'cat_invest',    name: 'ลงทุน',        icon: '📈', type: 'income', ..._SEED_COMMON },
-  { id: 'cat_settle',    name: 'ได้รับเงินคืน', icon: '💸', type: 'income', ..._SEED_COMMON },
-  { id: 'cat_other_inc', name: 'อื่นๆ',        icon: '💰', type: 'income', ..._SEED_COMMON },
+  { id: 'cat_salary',    name: 'เงินเดือน',    icon: 'briefcase',    type: 'income', ..._SEED_COMMON },
+  { id: 'cat_freelance', name: 'รายได้พิเศษ', icon: 'sparkles',     type: 'income', ..._SEED_COMMON },
+  { id: 'cat_invest',    name: 'ลงทุน',        icon: 'trending-up',  type: 'income', ..._SEED_COMMON },
+  { id: 'cat_settle',    name: 'ได้รับเงินคืน', icon: 'arrow-up-right', type: 'income', ..._SEED_COMMON },
+  { id: 'cat_other_inc', name: 'อื่นๆ',        icon: 'coins',        type: 'income', ..._SEED_COMMON },
 ];
