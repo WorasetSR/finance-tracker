@@ -8,6 +8,22 @@ import { currentMonth, todayStr } from '../schema.js';
 import { exportTransactions } from '../export.js';
 import { renderIcon } from '../icons.js';
 
+export function isPersonalIncome(t) {
+  if (t.type !== 'income') return false;
+  const note = t.note || '';
+  if (t.isPoolDeposit || note.includes('[เติมเงินตี้')) return false;
+  if (t.isAdvanceSettlement || note.includes('[เคลียร์ฝากจ่าย]')) return false;
+  return true;
+}
+
+export function isPersonalExpense(t) {
+  if (t.type !== 'expense') return false;
+  const note = t.note || '';
+  if (t.isPoolExpense || (note.includes('[ชำระบิลตี้') && !note.includes('ส่วนของเรา'))) return false;
+  if (t.isAdvance || (note.includes('[ฝากจ่าย:') && (t.advanceStatus === 'pending' || note.includes(':pending]')))) return false;
+  return true;
+}
+
 export async function initTransactions(container, store, { openTxModal, showToast }) {
   let month        = currentMonth();
   let filterType   = 'all';  // 'all' | 'income' | 'expense' | 'transfer'
@@ -133,9 +149,9 @@ export async function initTransactions(container, store, { openTxModal, showToas
 
         <!-- Summary bar -->
         <div class="tx-summary">
-          <span class="income">+${formatTHB(txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amountMinor, 0))}</span>
+          <span class="income">+${formatTHB(txs.filter(isPersonalIncome).reduce((s, t) => s + t.amountMinor, 0))}</span>
           <span class="divider">|</span>
-          <span class="expense">-${formatTHB(txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amountMinor, 0))}</span>
+          <span class="expense">-${formatTHB(txs.filter(isPersonalExpense).reduce((s, t) => s + t.amountMinor, 0))}</span>
           <span class="tx-count">${txs.length} รายการ ${searchQuery || activeTag ? '(กรองแล้ว)' : ''}</span>
         </div>
 
@@ -260,8 +276,8 @@ function renderListView(groupKeys, groups, catMap, accMap, isFiltered = false) {
 
   return groupKeys.map(date => {
     const dayTxs = groups[date];
-    const dayIncome  = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amountMinor, 0);
-    const dayExpense = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amountMinor, 0);
+    const dayIncome  = dayTxs.filter(isPersonalIncome).reduce((s, t) => s + t.amountMinor, 0);
+    const dayExpense = dayTxs.filter(isPersonalExpense).reduce((s, t) => s + t.amountMinor, 0);
 
     return `
       <div class="tx-group">
@@ -293,8 +309,8 @@ function renderCalendarView(month, txs, selectedDate, catMap, accMap) {
   for (const t of txs) {
     if (!t.date) continue;
     if (!dayTotals[t.date]) dayTotals[t.date] = { income: 0, expense: 0, count: 0 };
-    if (t.type === 'income') dayTotals[t.date].income += t.amountMinor;
-    if (t.type === 'expense') dayTotals[t.date].expense += t.amountMinor;
+    if (isPersonalIncome(t)) dayTotals[t.date].income += t.amountMinor;
+    if (isPersonalExpense(t)) dayTotals[t.date].expense += t.amountMinor;
     dayTotals[t.date].count++;
   }
 
@@ -321,8 +337,8 @@ function renderCalendarView(month, txs, selectedDate, catMap, accMap) {
   }
 
   const selTxs = txs.filter(t => t.date === selectedDate);
-  const selIncome  = selTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amountMinor, 0);
-  const selExpense = selTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amountMinor, 0);
+  const selIncome  = selTxs.filter(isPersonalIncome).reduce((s, t) => s + t.amountMinor, 0);
+  const selExpense = selTxs.filter(isPersonalExpense).reduce((s, t) => s + t.amountMinor, 0);
 
   return `
     <div class="calendar-card">
@@ -378,6 +394,9 @@ function renderTxRow(tx, catMap, accMap) {
           ${cat?.name || (isTransfer ? 'โอนเงิน' : 'ไม่ระบุ')}
           ${tx.isAdvance ? `<span class="badge-advance ${tx.advanceStatus === 'settled' ? 'settled' : ''}">${tx.advanceStatus === 'settled' ? 'คืนแล้ว: ' : 'รอคืน: '}${tx.advanceTo || 'เพื่อน'}</span>` : ''}
           ${tx.isAdvanceSettlement ? `<span class="badge-advance settled">รับเงินคืน</span>` : ''}
+          ${tx.isPoolDeposit || (tx.note || '').includes('[เติมเงินตี้') ? `<span class="badge-advance settled">ตี้: สมาชิกเติมเงิน</span>` : ''}
+          ${tx.isPoolExpense || ((tx.note || '').includes('[ชำระบิลตี้') && !(tx.note || '').includes('ส่วนของเรา')) ? `<span class="badge-advance">ตี้: ส่วนสมาชิก</span>` : ''}
+          ${tx.isPoolSelfShare || (tx.note || '').includes('[ชำระบิลตี้ - ส่วนของเรา]') ? `<span class="badge-advance">ตี้: ส่วนของเรา</span>` : ''}
         </span>
         <span class="tx-meta">
           ${acc?.name || ''}${isTransfer && toAcc ? ' → ' + toAcc.name : ''}${tx.note ? ' · ' + tx.note : ''}

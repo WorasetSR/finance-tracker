@@ -73,7 +73,9 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const catTotals = {};
     for (const tx of txs) {
-      if (tx.type !== 'expense' || tx.isAdvance) continue;
+      const isAdv = tx.isAdvance || ((tx.note || '').includes('[ฝากจ่าย:') && (tx.advanceStatus === 'pending' || (tx.note || '').includes(':pending]')));
+      const isPoolExp = tx.isPoolExpense || ((tx.note || '').includes('[ชำระบิลตี้') && !(tx.note || '').includes('ส่วนของเรา'));
+      if (tx.type !== 'expense' || isAdv || isPoolExp) continue;
       const cat = catMap[tx.categoryId];
       if (!cat) continue;
       catTotals[tx.categoryId] = (catTotals[tx.categoryId] || { cat, total: 0 });

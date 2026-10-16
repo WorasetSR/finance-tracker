@@ -153,6 +153,30 @@ export function toTxRow(t) {
       note = note ? `${note} ${tag}` : tag;
     }
   }
+  if (t.isPoolDeposit) {
+    const tag = `[pool-deposit:${t.poolId || ''}:${t.poolMemberId || ''}]`;
+    if (!note.includes('[pool-deposit:')) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
+  if (t.isPoolExpense) {
+    const tag = `[pool-expense:${t.poolId || ''}]`;
+    if (!note.includes('[pool-expense:')) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
+  if (t.isPoolFunding) {
+    const tag = `[pool-funding:${t.poolId || ''}:${t.poolMemberId || ''}]`;
+    if (!note.includes('[pool-funding:')) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
+  if (t.isPoolSelfShare) {
+    const tag = `[pool-self-share:${t.poolId || ''}]`;
+    if (!note.includes('[pool-self-share:')) {
+      note = note ? `${note} ${tag}` : tag;
+    }
+  }
 
   return {
     id: t.id,
@@ -177,6 +201,12 @@ export function fromTxRow(r) {
   let advanceStatus = null;
   let isAdvanceSettlement = false;
   let splitGroupId = null;
+  let isPoolDeposit = false;
+  let isPoolExpense = false;
+  let isPoolFunding = false;
+  let isPoolSelfShare = false;
+  let poolId = null;
+  let poolMemberId = null;
 
   const advMatch = rawNote.match(/\[ฝากจ่าย:(.*?):(pending|settled)\]/);
   if (advMatch) {
@@ -197,6 +227,44 @@ export function fromTxRow(r) {
     note = note.replace(splitMatch[0], '').trim();
   }
 
+  const poolDepMatch = rawNote.match(/\[pool-deposit:(.*?):(.*?)]/);
+  if (poolDepMatch || rawNote.includes('[เติมเงินตี้')) {
+    isPoolDeposit = true;
+    if (poolDepMatch) {
+      poolId = poolDepMatch[1] || null;
+      poolMemberId = poolDepMatch[2] || null;
+      note = note.replace(poolDepMatch[0], '').trim();
+    }
+  }
+
+  const poolExpMatch = rawNote.match(/\[pool-expense:(.*?)]/);
+  if (poolExpMatch || (rawNote.includes('[ชำระบิลตี้') && !rawNote.includes('ส่วนของเรา'))) {
+    isPoolExpense = true;
+    if (poolExpMatch) {
+      poolId = poolExpMatch[1] || null;
+      note = note.replace(poolExpMatch[0], '').trim();
+    }
+  }
+
+  const poolFundMatch = rawNote.match(/\[pool-funding:(.*?):(.*?)]/);
+  if (poolFundMatch || rawNote.includes('[จ่ายค่าตี้')) {
+    isPoolFunding = true;
+    if (poolFundMatch) {
+      poolId = poolFundMatch[1] || null;
+      poolMemberId = poolFundMatch[2] || null;
+      note = note.replace(poolFundMatch[0], '').trim();
+    }
+  }
+
+  const poolSelfMatch = rawNote.match(/\[pool-self-share:(.*?)]/);
+  if (poolSelfMatch || rawNote.includes('[ชำระบิลตี้ - ส่วนของเรา]')) {
+    isPoolSelfShare = true;
+    if (poolSelfMatch) {
+      poolId = poolSelfMatch[1] || null;
+      note = note.replace(poolSelfMatch[0], '').trim();
+    }
+  }
+
   return {
     id: r.id,
     type: r.type,
@@ -209,6 +277,12 @@ export function fromTxRow(r) {
     advanceStatus,
     isAdvanceSettlement,
     splitGroupId,
+    isPoolDeposit,
+    isPoolExpense,
+    isPoolFunding,
+    isPoolSelfShare,
+    poolId,
+    poolMemberId,
     accountId: r.account_id || null,
     categoryId: r.category_id || null,
     fromAccountId: r.from_account_id || null,

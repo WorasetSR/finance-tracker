@@ -278,31 +278,72 @@ export async function runPoolCycle({
     member.balanceMinor -= member.shareAmountMinor;
   }
 
+  const selfMember = pool.members.find(m => m.isSelf);
+  const selfShareMinor = selfMember ? (selfMember.shareAmountMinor || 0) : 0;
+  const friendsShareMinor = Math.max(0, pool.amountMinor - selfShareMinor);
+
   pool.lastCycleMonth = monthStr;
   pool.updatedAt = nowISO();
   saveGroupPool(pool);
 
-  // Create expense transaction from pool account
-  const tx = makeTransaction({
-    type: 'expense',
-    amountMinor: pool.amountMinor,
-    date,
-    accountId: pool.accountId,
-    categoryId: 'cat_bills',
-    note: `[ชำระบิลตี้] ${pool.name} ประจำรอบเดือน ${monthStr}`,
-    isPoolExpense: true,
-    poolId: pool.id,
-  });
+  const createdTxs = [];
 
-  if (store) {
-    await store.put('transactions', tx);
-    await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
-    try {
-      syncTransaction(tx).catch(console.error);
-    } catch {}
+  // 1. ส่วนของเรา: นับเป็นรายจ่ายส่วนตัว (Personal Expense) เพื่อสะท้อนค่าใช้จ่ายจริงใน Dashboard
+  if (selfShareMinor > 0) {
+    const selfTx = makeTransaction({
+      type: 'expense',
+      amountMinor: selfShareMinor,
+      date,
+      accountId: pool.accountId,
+      categoryId: 'cat_bills',
+      note: `[ชำระบิลตี้ - ส่วนของเรา] ${pool.name} ประจำรอบเดือน ${monthStr}`,
+      isPoolSelfShare: true,
+      poolId: pool.id,
+      poolMemberId: selfMember?.id || null,
+    });
+    createdTxs.push(selfTx);
   }
 
-  return { pool, tx };
+  // 2. ส่วนของสมาชิกคนอื่น: ตัดออกจากบัญชีกองกลาง แต่ไม่นับเป็นรายจ่ายส่วนตัวคุณ (isPoolExpense: true)
+  if (friendsShareMinor > 0) {
+    const friendsTx = makeTransaction({
+      type: 'expense',
+      amountMinor: friendsShareMinor,
+      date,
+      accountId: pool.accountId,
+      categoryId: 'cat_bills',
+      note: `[ชำระบิลตี้ - ส่วนของสมาชิก] ${pool.name} ประจำรอบเดือน ${monthStr}`,
+      isPoolExpense: true,
+      poolId: pool.id,
+    });
+    createdTxs.push(friendsTx);
+  }
+
+  if (createdTxs.length === 0) {
+    const zeroTx = makeTransaction({
+      type: 'expense',
+      amountMinor: 0,
+      date,
+      accountId: pool.accountId,
+      categoryId: 'cat_bills',
+      note: `[ชำระบิลตี้] ${pool.name} ประจำรอบเดือน ${monthStr}`,
+      isPoolExpense: true,
+      poolId: pool.id,
+    });
+    createdTxs.push(zeroTx);
+  }
+
+  if (store) {
+    for (const tx of createdTxs) {
+      await store.put('transactions', tx);
+      await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+      try {
+        syncTransaction(tx).catch(console.error);
+      } catch {}
+    }
+  }
+
+  return { pool, createdTxs, tx: createdTxs[0] };
 }
 
 /**

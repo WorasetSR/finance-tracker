@@ -349,14 +349,21 @@ export class LocalStore {
     let expense = 0;
 
     for (const t of txs) {
+      const note = t.note || '';
+      const isAdv = t.isAdvance || (note.includes('[ฝากจ่าย:') && (t.advanceStatus === 'pending' || note.includes(':pending]')));
+      const isAdvSet = t.isAdvanceSettlement || note.includes('[เคลียร์ฝากจ่าย]');
+      const isDeposit = t.isPoolDeposit || (t.type === 'income' && note.includes('[เติมเงินตี้'));
+      const isPoolExp = t.isPoolExpense || (t.type === 'expense' && note.includes('[ชำระบิลตี้') && !note.includes('ส่วนของเรา'));
+
       // Exclude pending advances from user personal expenses so metrics don't inflate
-      if (t.isAdvance) continue;
+      if (isAdv) continue;
       // Exclude debt settlement from user personal income
-      if (t.isAdvanceSettlement) continue;
+      if (isAdvSet) continue;
       // Exclude group pool deposits from personal income
-      if (t.isPoolDeposit) continue;
+      if (isDeposit) continue;
       // Exclude group pool expenses from personal expenses
-      if (t.isPoolExpense) continue;
+      if (isPoolExp) continue;
+
       if (t.type === 'income')  income  += t.amountMinor;
       if (t.type === 'expense') expense += t.amountMinor;
     }

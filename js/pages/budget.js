@@ -208,11 +208,17 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
 
         const memberShareMsg = pool.members.map(m => `  • ${m.name}: หัก ${formatTHB(m.shareAmountMinor)}`).join('\n');
 
+        const selfMember = pool.members.find(m => m.isSelf);
+        const selfShareMinor = selfMember ? (selfMember.shareAmountMinor || 0) : 0;
+        const friendsShareMinor = Math.max(0, pool.amountMinor - selfShareMinor);
+
         const ok = await showConfirm(
           `ยืนยันตัดรอบบิล "${pool.name}" (${formatMonth(month)})`,
-          `ระบบจะดำเนินการ 2 ส่วน:\n` +
-          `1. 💸 บันทึกรายจ่ายบิล ${formatTHB(pool.amountMinor)} ตัดจากบัญชี "${acc?.name || 'กองกลาง'}" (ไม่นับเป็นรายจ่ายส่วนตัวคุณ)\n` +
-          `2. 👥 หักโควตาสมาชิกทุกคน:\n${memberShareMsg}\n\n` +
+          `ระบบจะดำเนินการแยกบันทึกให้โดยอัตโนมัติ:\n` +
+          `1. 💸 บันทึกรายจ่ายส่วนตัวคุณ (ส่วนของเรา): ${formatTHB(selfShareMinor)} (สะท้อนใน Dashboard)\n` +
+          `2. 👥 บันทึกรายจ่ายกองกลาง (ส่วนสมาชิก): ${formatTHB(friendsShareMinor)} (ไม่นับเป็นรายจ่ายส่วนตัวคุณ)\n` +
+          `3. 💳 รวมตัดยอดจากบัญชี "${acc?.name || 'กองกลาง'}": ${formatTHB(pool.amountMinor)}\n` +
+          `4. 👥 หักโควตาสมาชิกทุกคน:\n${memberShareMsg}\n\n` +
           `ยืนยันดำเนินการหรือไม่?`
         );
         if (!ok) return;
