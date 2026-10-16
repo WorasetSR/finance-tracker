@@ -23,7 +23,7 @@ import {
   testSupabaseConnection,
 } from './supabase-client.js';
 import { makeTransaction, makeAccount, makeCategory, makeBudget, genId, todayStr, currentMonth } from './schema.js';
-import { parseAmount, formatTHB, formatMonth } from './format.js';
+import { parseAmount, formatTHB, formatMonth, formatDateRelative } from './format.js';
 import { parseSlipImage, matchBankToAccount, compressImage } from './slip-parser.js';
 import { suggestCategory, learnHabit, getHabitData } from './habit-engine.js';
 import { getSubscriptions, saveSubscription, deleteSubscription, paySubscription } from './subscriptions.js';
@@ -531,6 +531,8 @@ async function openTxModal(txId = null) {
     if (advCheck) advCheck.checked = isAdv;
     if (advBox) advBox.classList.toggle('hidden', !isAdv);
     if (advInput) advInput.value = tx.advanceTo || '';
+    const settleAction = document.getElementById('tx-advance-settle-action');
+    if (settleAction) settleAction.classList.toggle('hidden', !(isAdv && tx.advanceStatus === 'pending'));
   } else {
     titleEl.textContent = 'จดรายการ';
     deleteBtn.classList.add('hidden');
@@ -552,6 +554,8 @@ async function openTxModal(txId = null) {
     if (advCheck) advCheck.checked = false;
     if (advBox) advBox.classList.add('hidden');
     if (advInput) advInput.value = '';
+    const settleAction = document.getElementById('tx-advance-settle-action');
+    if (settleAction) settleAction.classList.add('hidden');
   }
 
   openModal('tx-modal');
@@ -782,6 +786,13 @@ document.getElementById('tx-type-tabs')?.addEventListener('click', (e) => {
 
 document.getElementById('tx-is-advance')?.addEventListener('change', (e) => {
   document.getElementById('tx-advance-details')?.classList.toggle('hidden', !e.target.checked);
+});
+
+document.getElementById('btn-tx-settle-now')?.addEventListener('click', () => {
+  const txId = document.getElementById('tx-id').value;
+  if (!txId) return;
+  closeModal('tx-modal');
+  window.openSettleAdvanceModal?.(txId, () => refreshPage());
 });
 
 document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
@@ -2235,6 +2246,98 @@ document.getElementById('fund-my-share-form')?.addEventListener('submit', async 
     }
   } catch (err) {
     showToast(err.message, 'error');
+  }
+});
+
+let currentSettleAdvCallback = null;
+
+window.openSettleAdvanceModal = async (advId, onSuccess = null) => {
+  const adv = await store.get('transactions', advId);
+  if (!adv) return;
+
+  currentSettleAdvCallback = onSuccess;
+  document.getElementById('settle-adv-id').value = adv.id;
+
+  const accounts = await store.getAccounts();
+  const activeAccounts = accounts.filter(a => !a.archived);
+  const accSelect = document.getElementById('settle-adv-account');
+  accSelect.innerHTML = activeAccounts.map(a => 
+    `<option value="${a.id}" ${a.id === adv.accountId ? 'selected' : ''}>${a.name}</option>`
+  ).join('');
+
+  document.getElementById('settle-adv-amount').value = (adv.amountMinor / 100).toFixed(2);
+  document.getElementById('settle-adv-date').value = todayStr();
+  const friendName = adv.advanceTo || 'เพื่อน';
+  document.getElementById('settle-adv-note').value = `รับเงินคืนจาก ${friendName}` + (adv.note ? ` (${adv.note})` : '');
+
+  const origAcc = accounts.find(a => a.id === adv.accountId);
+  const badge = document.getElementById('settle-adv-info-badge');
+  if (badge) {
+    badge.innerHTML = `
+      เพื่อน: <span style="color:var(--warning);font-weight:700">${friendName}</span> · ยอดออกก่อน: <span class="mono">${formatTHB(adv.amountMinor)}</span><br>
+      <span style="font-size:12px;color:var(--text-muted);font-weight:400">บัญชีที่สำรองจ่ายตอนแรก: ${origAcc?.name || 'ไม่ระบุ'} (${formatDateRelative(adv.date)})</span>
+    `;
+  }
+
+  openModal('settle-adv-modal');
+};
+
+document.getElementById('settle-adv-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const advId = document.getElementById('settle-adv-id').value;
+  const targetAccountId = document.getElementById('settle-adv-account').value;
+  const amountMinor = parseAmount(document.getElementById('settle-adv-amount').value);
+  const date = document.getElementById('settle-adv-date').value || todayStr();
+  const note = document.getElementById('settle-adv-note').value.trim();
+
+  if (!targetAccountId) {
+    showToast('กรุณาเลือกบัญชีที่รับเงินคืน', 'error');
+    return;
+  }
+  if (!amountMinor || amountMinor <= 0) {
+    showToast('กรุณาระบุจำนวนเงินที่ถูกต้อง', 'error');
+    return;
+  }
+
+  const adv = await store.get('transactions', advId);
+  if (!adv) {
+    showToast('ไม่พบรายการออกเงินล่วงหน้า', 'error');
+    return;
+  }
+
+  const friendName = adv.advanceTo || 'เพื่อน';
+  const accounts = await store.getAccounts();
+  const targetAcc = accounts.find(a => a.id === targetAccountId);
+
+  // Update advance transaction
+  adv.advanceStatus = 'settled';
+  adv.settledAt = new Date().toISOString();
+  adv.updatedAt = new Date().toISOString();
+  await store.put('transactions', adv);
+  await store.addToPendingQueue({ id: adv.id, store: 'transactions', op: 'update' });
+  syncTransaction(adv).catch(console.error);
+
+  // Create settlement income transaction into the chosen account
+  const settleTx = makeTransaction({
+    type: 'income',
+    amountMinor,
+    date,
+    accountId: targetAccountId,
+    categoryId: 'cat_settle',
+    note: note || `รับเงินคืนจาก ${friendName}`,
+    isAdvanceSettlement: true,
+  });
+  await store.put('transactions', settleTx);
+  await store.addToPendingQueue({ id: settleTx.id, store: 'transactions', op: 'create' });
+  syncTransaction(settleTx).catch(console.error);
+
+  closeModal('settle-adv-modal');
+  showToast(`บันทึกรับเงินคืนจาก ${friendName} เข้า ${targetAcc?.name || 'บัญชี'} เรียบร้อยแล้ว`);
+
+  if (typeof currentSettleAdvCallback === 'function') {
+    currentSettleAdvCallback();
+  } else {
+    refreshPage();
   }
 });
 

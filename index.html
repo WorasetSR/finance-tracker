@@ -342,6 +342,11 @@
 
         <div id="tx-advance-details" class="hidden" style="margin-bottom:10px">
           <input type="text" id="tx-advance-to" placeholder="ระบุชื่อเพื่อนที่ฝากจ่าย (เช่น บอย, มายด์)" />
+          <div id="tx-advance-settle-action" class="hidden" style="margin-top:8px">
+            <button type="button" class="btn-ghost btn-xs" id="btn-tx-settle-now" style="color:var(--warning);border:1px solid var(--warning);width:100%;justify-content:center">
+              ✓ บันทึกว่าเพื่อนคืนเงินแล้ว
+            </button>
+          </div>
         </div>
 
         <!-- Split Items Section (Shown when user clicks แยกหลายหมวด) -->
@@ -720,6 +725,50 @@
         <div class="modal-actions">
           <button type="button" class="btn-ghost" data-close="fund-my-share-modal">ยกเลิก</button>
           <button type="submit" class="btn-primary">ยืนยันการโอนเงิน</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: SETTLE ADVANCE (บันทึกรับเงินคืนจากเพื่อน) ──────── -->
+<div id="settle-adv-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="settle-adv-title">บันทึกรับเงินคืน</h2>
+      <button class="modal-close" data-close="settle-adv-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="settle-adv-form" autocomplete="off">
+        <input type="hidden" id="settle-adv-id" />
+        <div class="field">
+          <div id="settle-adv-info-badge" style="padding:10px 12px;background:var(--surface-2);border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:4px">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+        <div class="field">
+          <label for="settle-adv-account">รับเงินเข้าบัญชีไหน</label>
+          <select id="settle-adv-account" required></select>
+        </div>
+        <div class="field">
+          <label for="settle-adv-amount">จำนวนเงินที่ได้รับคืน (฿)</label>
+          <input type="number" id="settle-adv-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินคืน" />
+        </div>
+        <div class="field">
+          <label for="settle-adv-date">วันที่ได้รับเงิน</label>
+          <input type="date" id="settle-adv-date" required />
+        </div>
+        <div class="field">
+          <label for="settle-adv-note">บันทึกช่วยจำ</label>
+          <input type="text" id="settle-adv-note" placeholder="เช่น เพื่อนโอนคืนพร้อมเพย์..." />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-close="settle-adv-modal">ยกเลิก</button>
+          <button type="submit" class="btn-primary">บันทึกรับเงินคืน</button>
         </div>
       </form>
     </div>

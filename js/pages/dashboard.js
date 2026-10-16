@@ -364,41 +364,20 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
 
     // Advance settlement clicks
     container.querySelectorAll('.btn-settle-adv').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const advId = btn.dataset.advId;
-        const adv = await store.get('transactions', advId);
-        if (!adv) return;
-
-        const friendName = adv.advanceTo || 'เพื่อน';
-        const ok = await showConfirm(
-          'บันทึกว่าได้รับเงินคืน',
-          `ยืนยันว่าได้รับเงินคืนจาก ${friendName} จำนวน ${formatTHB(adv.amountMinor)} เรียบร้อยแล้ว?`
-        );
-        if (!ok) return;
-
-        adv.advanceStatus = 'settled';
-        adv.settledAt = new Date().toISOString();
-        adv.updatedAt = new Date().toISOString();
-        await store.put('transactions', adv);
-        await store.addToPendingQueue({ id: adv.id, store: 'transactions', op: 'update' });
-        syncTransaction(adv).catch(console.error);
-
-        const settleTx = makeTransaction({
-          type: 'income',
-          amountMinor: adv.amountMinor,
-          date: todayStr(),
-          accountId: adv.accountId,
-          categoryId: 'cat_settle',
-          note: `รับเงินคืนจาก ${friendName}` + (adv.note ? ` (${adv.note})` : ''),
-          isAdvanceSettlement: true,
+        window.openSettleAdvanceModal?.(advId, () => {
+          render();
         });
-        await store.put('transactions', settleTx);
-        await store.addToPendingQueue({ id: settleTx.id, store: 'transactions', op: 'create' });
-        syncTransaction(settleTx).catch(console.error);
+      });
+    });
 
-        showToast(`บันทึกรับเงินคืนจาก ${friendName} เรียบร้อยแล้ว`);
-        render();
+    // Advance row click -> open transaction modal to view/edit
+    container.querySelectorAll('.receivable-row[data-adv-id]').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-settle-adv')) return;
+        openTxModal(row.dataset.advId);
       });
     });
 
