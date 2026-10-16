@@ -193,6 +193,68 @@ export async function topUpMember({
 }
 
 /**
+ * Fund the user's own share into the pool account via transfer from personal account.
+ * Updates the user member's balance and creates a transfer transaction from personal account -> pool account.
+ *
+ * @param {Object} opts
+ * @param {string} opts.poolId
+ * @param {string} opts.memberId
+ * @param {string} opts.fromAccountId - Personal source account
+ * @param {number} opts.amountMinor
+ * @param {string} [opts.date]
+ * @param {string} [opts.note]
+ * @param {Object} opts.store
+ */
+export async function fundMyShare({
+  poolId,
+  memberId,
+  fromAccountId,
+  amountMinor,
+  date = todayStr(),
+  note = '',
+  store,
+}) {
+  const pools = getGroupPools();
+  const pool = pools.find(p => p.id === poolId);
+  if (!pool) throw new Error('ไม่พบข้อมูลตี้หารบิล');
+
+  const member = pool.members.find(m => m.id === memberId);
+  if (!member) throw new Error('ไม่พบข้อมูลสมาชิกในตี้');
+
+  const fundingMinor = Math.max(0, Math.round(Number(amountMinor) || 0));
+  if (fundingMinor <= 0) throw new Error('จำนวนเงินโอนต้องมากกว่า 0 บาท');
+  if (!fromAccountId) throw new Error('กรุณาเลือกบัญชีต้นทางส่วนตัว');
+
+  // Update member balance
+  member.balanceMinor += fundingMinor;
+  pool.updatedAt = nowISO();
+  saveGroupPool(pool);
+
+  // Create transfer transaction from personal account to pool account
+  const tx = makeTransaction({
+    type: 'transfer',
+    amountMinor: fundingMinor,
+    date,
+    fromAccountId,
+    toAccountId: pool.accountId,
+    note: note ? note : `[จ่ายค่าตี้ ${pool.name}] ส่วนของ ${member.name}`,
+    isPoolFunding: true,
+    poolId: pool.id,
+    poolMemberId: member.id,
+  });
+
+  if (store) {
+    await store.put('transactions', tx);
+    await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+    try {
+      syncTransaction(tx).catch(console.error);
+    } catch {}
+  }
+
+  return { pool, member, tx };
+}
+
+/**
  * Execute monthly cycle deduction for all members and record pool bill payment expense.
  *
  * @param {Object} opts

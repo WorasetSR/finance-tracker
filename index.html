@@ -675,6 +675,57 @@
   </div>
 </div>
 
+<!-- ── MODAL: FUND MY SHARE (โอนเงินส่วนตัวเราเข้ากองกลาง) ──── -->
+<div id="fund-my-share-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="fund-my-share-title">โอนเงินเราเข้ากองกลาง</h2>
+      <button class="modal-close" data-close="fund-my-share-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="fund-my-share-form" autocomplete="off">
+        <input type="hidden" id="fund-pool-id" />
+        <input type="hidden" id="fund-member-id" />
+        <div class="field">
+          <div id="fund-info-badge" style="padding:10px 12px;background:var(--surface-2);border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:4px">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+        <div class="field">
+          <label for="fund-from-account">โอนจากบัญชีส่วนตัวของเรา</label>
+          <select id="fund-from-account" required></select>
+        </div>
+        <div class="field">
+          <label>ไปยังบัญชีกองกลาง</label>
+          <div id="fund-to-account-display" style="padding:8px 10px;background:var(--surface-3);border-radius:var(--radius-sm);font-size:13px;font-weight:600">
+            <!-- Display pool account name -->
+          </div>
+        </div>
+        <div class="field">
+          <label for="fund-amount">จำนวนเงินที่โอน (฿)</label>
+          <input type="number" id="fund-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินโอน" autofocus />
+        </div>
+        <div class="field">
+          <label for="fund-date">วันที่โอน</label>
+          <input type="date" id="fund-date" required />
+        </div>
+        <div class="field">
+          <label for="fund-note">บันทึกช่วยจำ</label>
+          <input type="text" id="fund-note" placeholder="เช่น จ่ายส่วนของเรา, เติมเผื่อ 3 เดือน..." />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-close="fund-my-share-modal">ยกเลิก</button>
+          <button type="submit" class="btn-primary">ยืนยันการโอนเงิน</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL: BATCH SLIP INGESTION (COMPACT MOBILE VIEW) ── -->
 <div id="slip-modal" class="modal-overlay hidden">
   <div class="modal modal-lg">

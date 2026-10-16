@@ -96,6 +96,7 @@ export function makeTransaction({
   isAdvanceSettlement = false,
   isPoolDeposit = false,
   isPoolExpense = false,
+  isPoolFunding = false,
   poolId = null,
   poolMemberId = null,
 } = {}) {
@@ -120,6 +121,7 @@ export function makeTransaction({
     isAdvanceSettlement: Boolean(isAdvanceSettlement),
     isPoolDeposit:  Boolean(isPoolDeposit),
     isPoolExpense:  Boolean(isPoolExpense),
+    isPoolFunding:  Boolean(isPoolFunding),
     poolId:         poolId        ?? null,
     poolMemberId:   poolMemberId  ?? null,
     createdAt:      now,

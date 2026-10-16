@@ -34,6 +34,7 @@ import {
   makeGroupPool,
   makePoolMember,
   topUpMember,
+  fundMyShare,
 } from './group-pool.js';
 import { exportTransactions, exportFullJsonBackup, importFullJsonBackup } from './export.js';
 import {
@@ -2147,6 +2148,88 @@ document.getElementById('pool-topup-form')?.addEventListener('submit', async (e)
     showToast(`บันทึกยอดเงินเข้าของ ${member.name} จำนวน ${formatTHB(amountMinor)} เรียบร้อย`);
     if (typeof currentTopUpCallback === 'function') {
       currentTopUpCallback();
+    } else {
+      refreshPage();
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+let currentFundShareCallback = null;
+
+window.openFundMyShareModal = async (poolId, memberId, onSuccess = null) => {
+  const pools = getGroupPools();
+  const pool = pools.find(p => p.id === poolId);
+  if (!pool) return;
+  const member = pool.members.find(m => m.id === memberId);
+  if (!member) return;
+
+  currentFundShareCallback = onSuccess;
+  document.getElementById('fund-pool-id').value = pool.id;
+  document.getElementById('fund-member-id').value = member.id;
+
+  // Populate personal accounts excluding pool account
+  const accounts = await store.getAccounts();
+  const fromAccSelect = document.getElementById('fund-from-account');
+  const personalAccounts = accounts.filter(a => a.id !== pool.accountId && !a.archived);
+  fromAccSelect.innerHTML = (personalAccounts.length ? personalAccounts : accounts).map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+
+  // Target pool account display
+  const poolAcc = accounts.find(a => a.id === pool.accountId);
+  const poolAccDisplay = document.getElementById('fund-to-account-display');
+  if (poolAccDisplay) {
+    poolAccDisplay.textContent = poolAcc ? `${poolAcc.name} (บัญชีกองกลาง)` : 'บัญชีกองกลาง';
+  }
+
+  // Set default amount: if member is in debt, default to abs(debt), else shareAmountMinor
+  const defaultAmountMinor = member.balanceMinor < 0 ? Math.abs(member.balanceMinor) : (member.shareAmountMinor || 0);
+  document.getElementById('fund-amount').value = defaultAmountMinor ? (defaultAmountMinor / 100).toFixed(2) : '';
+  document.getElementById('fund-date').value = todayStr();
+  document.getElementById('fund-note').value = '';
+
+  const badge = document.getElementById('fund-info-badge');
+  badge.innerHTML = `
+    ส่วนของเราในตี้: <span style="color:var(--primary);font-weight:700">${pool.name}</span><br>
+    ยอดหารต่อรอบ: <span class="mono">${formatTHB(member.shareAmountMinor)}</span> · เครดิตคงเหลือ: <span class="mono" style="color:${member.balanceMinor >= 0 ? 'var(--income)' : 'var(--expense)'}">${formatTHB(member.balanceMinor)}</span>
+  `;
+
+  openModal('fund-my-share-modal');
+};
+
+document.getElementById('fund-my-share-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const poolId = document.getElementById('fund-pool-id').value;
+  const memberId = document.getElementById('fund-member-id').value;
+  const fromAccountId = document.getElementById('fund-from-account').value;
+  const amountMinor = parseAmount(document.getElementById('fund-amount').value);
+  const date = document.getElementById('fund-date').value || todayStr();
+  const note = document.getElementById('fund-note').value.trim();
+
+  if (!fromAccountId) {
+    showToast('กรุณาเลือกบัญชีต้นทางส่วนตัว', 'error');
+    return;
+  }
+  if (!amountMinor || amountMinor <= 0) {
+    showToast('กรุณาระบุจำนวนเงินที่ต้องการโอน', 'error');
+    return;
+  }
+
+  try {
+    const { pool, member } = await fundMyShare({
+      poolId,
+      memberId,
+      fromAccountId,
+      amountMinor,
+      date,
+      note,
+      store,
+    });
+
+    closeModal('fund-my-share-modal');
+    showToast(`โอนเงินส่วนตัว ${formatTHB(amountMinor)} เข้ากองกลาง "${pool.name}" เรียบร้อยแล้ว`);
+    if (typeof currentFundShareCallback === 'function') {
+      currentFundShareCallback();
     } else {
       refreshPage();
     }

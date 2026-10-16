@@ -28,8 +28,12 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
       store.getAccounts(),
     ]);
 
+    const accountsWithBalance = await Promise.all(accounts.map(async a => {
+      const balance = await store.computeBalance(a.id);
+      return { ...a, balance };
+    }));
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
-    const accMap = Object.fromEntries(accounts.map(a => [a.id, a]));
+    const accMap = Object.fromEntries(accountsWithBalance.map(a => [a.id, a]));
 
     const spendMap = {};
     for (const tx of txs) {
@@ -200,10 +204,16 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
         const pools = getGroupPools();
         const pool = pools.find(p => p.id === poolId);
         if (!pool) return;
+        const acc = accMap[pool.accountId];
+
+        const memberShareMsg = pool.members.map(m => `  • ${m.name}: หัก ${formatTHB(m.shareAmountMinor)}`).join('\n');
 
         const ok = await showConfirm(
-          'ยืนยันตัดรอบบิลตี้',
-          `ต้องการตัดรอบบิลประจำเดือน ${formatMonth(month)} สำหรับ "${pool.name}" และหักเครดิตสมาชิกทุกคนหรือไม่?`
+          `ยืนยันตัดรอบบิล "${pool.name}" (${formatMonth(month)})`,
+          `ระบบจะดำเนินการ 2 ส่วน:\n` +
+          `1. 💸 บันทึกรายจ่ายบิล ${formatTHB(pool.amountMinor)} ตัดจากบัญชี "${acc?.name || 'กองกลาง'}" (ไม่นับเป็นรายจ่ายส่วนตัวคุณ)\n` +
+          `2. 👥 หักโควตาสมาชิกทุกคน:\n${memberShareMsg}\n\n` +
+          `ยืนยันดำเนินการหรือไม่?`
         );
         if (!ok) return;
 
@@ -214,6 +224,14 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
         } catch (err) {
           showToast(err.message, 'error');
         }
+      });
+    });
+
+    container.querySelectorAll('.btn-fund-my-share').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const { poolId, memberId } = btn.dataset;
+        window.openFundMyShareModal?.(poolId, memberId, render);
       });
     });
 
@@ -557,6 +575,20 @@ function renderGroupPoolsView(month, accMap) {
             </div>
           </div>
 
+          <!-- Central Pool Account Live Balance Strip -->
+          <div class="pool-account-badge" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);border-radius:var(--radius-sm);padding:8px 12px;margin:10px 0 12px;font-size:12.5px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="color:var(--text-muted)">${renderIcon('credit-card', 14)} บัญชีกองกลาง:</span>
+              <span style="font-weight:600;color:var(--text-primary)">${acc?.name || 'บัญชีกองกลาง'}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="color:var(--text-muted)">เงินสดในบัญชี:</span>
+              <span class="mono" style="font-weight:700;color:${(acc?.balance ?? 0) >= 0 ? 'var(--income)' : 'var(--expense)'}">
+                ${formatTHB(acc?.balance ?? 0)}
+              </span>
+            </div>
+          </div>
+
           <div class="pool-members-list">
             ${pool.members.map(member => {
               const status = formatMemberBalanceStatus(member);
@@ -577,14 +609,20 @@ function renderGroupPoolsView(month, accMap) {
                     </span>
                   </div>
                   <div class="pool-member-right">
-                    <button type="button" class="btn-ghost btn-xs btn-topup-member" data-pool-id="${pool.id}" data-member-id="${member.id}">
-                      ${renderIcon('plus', 12)} เติมเงิน
-                    </button>
-                    ${status.type === 'debt' && !member.isSelf ? `
-                      <button type="button" class="btn-ghost btn-xs btn-remind-member" data-pool-id="${pool.id}" data-member-id="${member.id}" title="คัดลอกข้อความทวงเงิน">
-                        ${renderIcon('send', 12)} ทวง
+                    ${member.isSelf ? `
+                      <button type="button" class="btn-primary btn-xs btn-fund-my-share" data-pool-id="${pool.id}" data-member-id="${member.id}">
+                        ${renderIcon('repeat', 12)} โอนเงินเราเข้ากองกลาง
                       </button>
-                    ` : ''}
+                    ` : `
+                      <button type="button" class="btn-ghost btn-xs btn-topup-member" data-pool-id="${pool.id}" data-member-id="${member.id}">
+                        ${renderIcon('plus', 12)} เงินเพื่อนเข้า
+                      </button>
+                      ${status.type === 'debt' ? `
+                        <button type="button" class="btn-ghost btn-xs btn-remind-member" data-pool-id="${pool.id}" data-member-id="${member.id}" title="คัดลอกข้อความทวงเงิน">
+                          ${renderIcon('send', 12)} ทวง
+                        </button>
+                      ` : ''}
+                    `}
                   </div>
                 </div>
               `;
