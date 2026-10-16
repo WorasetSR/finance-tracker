@@ -27,6 +27,14 @@ import { parseAmount, formatTHB, formatMonth } from './format.js';
 import { parseSlipImage, matchBankToAccount, compressImage } from './slip-parser.js';
 import { suggestCategory, learnHabit, getHabitData } from './habit-engine.js';
 import { getSubscriptions, saveSubscription, deleteSubscription, paySubscription } from './subscriptions.js';
+import {
+  getGroupPools,
+  saveGroupPool,
+  deleteGroupPool,
+  makeGroupPool,
+  makePoolMember,
+  topUpMember,
+} from './group-pool.js';
 import { exportTransactions, exportFullJsonBackup, importFullJsonBackup } from './export.js';
 import {
   renderIcon,
@@ -1695,6 +1703,220 @@ window.paySubscription = async (subId) => {
   refreshPage();
 };
 
+// ── Group Pool & Member Ledger Modal Wiring ──────────────────
+
+let currentTopUpCallback = null;
+
+function renderPoolMemberInputRow(m = {}) {
+  const div = document.createElement('div');
+  div.className = 'pool-member-edit-row';
+  div.innerHTML = `
+    <input type="hidden" class="pmem-id" value="${m.id || ''}" />
+    <input type="text" class="pmem-name" placeholder="ชื่อเพื่อน" value="${m.name || ''}" style="flex:1.2;min-width:0" required />
+    <input type="number" class="pmem-share mono-input" placeholder="ยอดหาร (฿)" value="${m.shareAmountMinor ? (m.shareAmountMinor / 100).toFixed(0) : ''}" style="flex:1;min-width:0" step="any" min="0" required />
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
+      <input type="checkbox" class="pmem-self" ${m.isSelf ? 'checked' : ''} /> เรา
+    </label>
+    <button type="button" class="icon-btn btn-remove-pmem" title="ลบ" style="padding:4px">
+      ${renderIcon('x', 14)}
+    </button>
+  `;
+  div.querySelector('.btn-remove-pmem').addEventListener('click', () => {
+    div.remove();
+  });
+  return div;
+}
+
+window.openGroupPoolModal = async (poolId = null) => {
+  const accounts = await store.getAccounts();
+  const poolAccSelect = document.getElementById('pool-account');
+  poolAccSelect.innerHTML = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+
+  const titleEl = document.getElementById('group-pool-modal-title');
+  const idInput = document.getElementById('pool-id');
+  const deleteBtn = document.getElementById('btn-delete-pool');
+  const container = document.getElementById('pool-members-container');
+  container.innerHTML = '';
+
+  if (poolId) {
+    const pools = getGroupPools();
+    const pool = pools.find(p => p.id === poolId);
+    if (!pool) return;
+
+    titleEl.textContent = 'แก้ไขตี้หารบิล';
+    idInput.value = pool.id;
+    document.getElementById('pool-name').value = pool.name || '';
+    document.getElementById('pool-amount').value = (pool.amountMinor / 100).toFixed(2);
+    document.getElementById('pool-due-day').value = pool.dueDay || 1;
+    document.getElementById('pool-account').value = pool.accountId || '';
+    document.getElementById('pool-note').value = pool.note || '';
+    setIconPicker('pool-icon-picker', pool.icon || 'users');
+    deleteBtn.classList.remove('hidden');
+
+    if (pool.members && pool.members.length > 0) {
+      pool.members.forEach(m => container.appendChild(renderPoolMemberInputRow(m)));
+    } else {
+      container.appendChild(renderPoolMemberInputRow({ name: 'เรา', isSelf: true }));
+      container.appendChild(renderPoolMemberInputRow({ name: '', isSelf: false }));
+    }
+  } else {
+    titleEl.textContent = 'สร้างตี้หารบิลใหม่';
+    idInput.value = '';
+    document.getElementById('pool-name').value = '';
+    document.getElementById('pool-amount').value = '';
+    document.getElementById('pool-due-day').value = new Date().getDate();
+    document.getElementById('pool-note').value = '';
+    setIconPicker('pool-icon-picker', 'users');
+    deleteBtn.classList.add('hidden');
+
+    container.appendChild(renderPoolMemberInputRow({ name: 'เรา', isSelf: true }));
+    container.appendChild(renderPoolMemberInputRow({ name: '', isSelf: false }));
+  }
+
+  openModal('group-pool-modal');
+};
+
+document.getElementById('btn-add-pool-member')?.addEventListener('click', () => {
+  const container = document.getElementById('pool-members-container');
+  container.appendChild(renderPoolMemberInputRow({ name: '', isSelf: false }));
+});
+
+document.getElementById('group-pool-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const editId = document.getElementById('pool-id').value;
+  const name = document.getElementById('pool-name').value.trim();
+  const amountMinor = parseAmount(document.getElementById('pool-amount').value);
+  const dueDay = parseInt(document.getElementById('pool-due-day').value, 10) || 1;
+  const accountId = document.getElementById('pool-account').value;
+  const note = document.getElementById('pool-note').value.trim();
+  const icon = getSelectedIcon('pool-icon-picker', 'users');
+
+  if (!name) {
+    showToast('กรุณาระบุชื่อตี้', 'error');
+    return;
+  }
+  if (!amountMinor || amountMinor <= 0) {
+    showToast('กรุณาระบุยอดบิลรวม', 'error');
+    return;
+  }
+
+  // Parse members from container
+  const memberRows = document.querySelectorAll('#pool-members-container .pool-member-edit-row');
+  const existingPool = editId ? getGroupPools().find(p => p.id === editId) : null;
+  const existingMembersMap = existingPool ? Object.fromEntries(existingPool.members.map(m => [m.id, m])) : {};
+
+  const members = [];
+  memberRows.forEach(row => {
+    const id = row.querySelector('.pmem-id').value || genId('pmem');
+    const mName = row.querySelector('.pmem-name').value.trim();
+    const shareMinor = parseAmount(row.querySelector('.pmem-share').value) || 0;
+    const isSelf = row.querySelector('.pmem-self').checked;
+
+    if (!mName) return;
+
+    const old = existingMembersMap[id];
+    members.push(makePoolMember({
+      id,
+      name: mName,
+      isSelf,
+      shareAmountMinor: shareMinor,
+      balanceMinor: old ? old.balanceMinor : 0,
+    }));
+  });
+
+  if (members.length === 0) {
+    showToast('กรุณาระบุสมาชิกอย่างน้อย 1 คน', 'error');
+    return;
+  }
+
+  const pool = makeGroupPool({
+    id: editId || undefined,
+    name,
+    icon,
+    accountId,
+    amountMinor,
+    dueDay,
+    cycle: 'monthly',
+    note,
+    members,
+    lastCycleMonth: existingPool?.lastCycleMonth || '',
+  });
+
+  saveGroupPool(pool);
+  closeModal('group-pool-modal');
+  showToast(editId ? 'แก้ไขตี้หารบิลแล้ว' : 'สร้างตี้หารบิลเรียบร้อยแล้ว');
+  refreshPage();
+});
+
+document.getElementById('btn-delete-pool')?.addEventListener('click', async () => {
+  const editId = document.getElementById('pool-id').value;
+  if (!editId) return;
+  const ok = await showConfirm('ลบตี้หารบิล', 'ต้องการลบตี้หารบิลนี้หรือไม่? (ประวัติการเงินที่บันทึกไปแล้วจะไม่ถูกลบ)');
+  if (!ok) return;
+
+  deleteGroupPool(editId);
+  closeModal('group-pool-modal');
+  showToast('ลบตี้หารบิลแล้ว');
+  refreshPage();
+});
+
+window.openPoolTopUpModal = (poolId, memberId, onSuccess = null) => {
+  const pools = getGroupPools();
+  const pool = pools.find(p => p.id === poolId);
+  if (!pool) return;
+  const member = pool.members.find(m => m.id === memberId);
+  if (!member) return;
+
+  currentTopUpCallback = onSuccess;
+  document.getElementById('topup-pool-id').value = pool.id;
+  document.getElementById('topup-member-id').value = member.id;
+  document.getElementById('topup-amount').value = '';
+  document.getElementById('topup-date').value = todayStr();
+  document.getElementById('topup-note').value = '';
+
+  const badge = document.getElementById('topup-info-badge');
+  badge.innerHTML = `
+    สมาชิก: <span style="color:var(--primary);font-weight:700">${member.name}</span> · ตี้: ${pool.name}<br>
+    ยอดคงเหลือปัจจุบัน: <span class="mono">${formatTHB(member.balanceMinor)}</span>
+  `;
+
+  openModal('pool-topup-modal');
+};
+
+document.getElementById('pool-topup-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const poolId = document.getElementById('topup-pool-id').value;
+  const memberId = document.getElementById('topup-member-id').value;
+  const amountMinor = parseAmount(document.getElementById('topup-amount').value);
+  const date = document.getElementById('topup-date').value || todayStr();
+  const note = document.getElementById('topup-note').value.trim();
+
+  if (!amountMinor || amountMinor <= 0) {
+    showToast('กรุณาระบุจำนวนเงินที่ถูกต้อง', 'error');
+    return;
+  }
+
+  try {
+    const { member } = await topUpMember({
+      poolId,
+      memberId,
+      amountMinor,
+      date,
+      note,
+      store,
+    });
+
+    closeModal('pool-topup-modal');
+    showToast(`บันทึกยอดเงินเข้าของ ${member.name} จำนวน ${formatTHB(amountMinor)} เรียบร้อย`);
+    if (typeof currentTopUpCallback === 'function') {
+      currentTopUpCallback();
+    } else {
+      refreshPage();
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
 
 // ── Settings page (Zero-Emoji Minimalist UI) ─────────────────
 

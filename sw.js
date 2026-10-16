@@ -1,4 +1,4 @@
-const CACHE = 'ft-v4.0';
+const CACHE = 'ft-v4.1';
 
 const SHELL = [
   './',
@@ -7,6 +7,7 @@ const SHELL = [
   './icon.svg',
   './css/style.css',
   './js/icons.js',
+  './js/group-pool.js',
   './js/app.js',
   './js/local-store.js',
   './js/schema.js',

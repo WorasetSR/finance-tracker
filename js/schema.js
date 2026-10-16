@@ -94,6 +94,10 @@ export function makeTransaction({
   advanceStatus = null,
   settledAt     = null,
   isAdvanceSettlement = false,
+  isPoolDeposit = false,
+  isPoolExpense = false,
+  poolId = null,
+  poolMemberId = null,
 } = {}) {
   const now = nowISO();
   return {
@@ -114,6 +118,10 @@ export function makeTransaction({
     advanceStatus:  advanceStatus ?? (isAdvance ? 'pending' : null),
     settledAt:      settledAt     ?? null,
     isAdvanceSettlement: Boolean(isAdvanceSettlement),
+    isPoolDeposit:  Boolean(isPoolDeposit),
+    isPoolExpense:  Boolean(isPoolExpense),
+    poolId:         poolId        ?? null,
+    poolMemberId:   poolMemberId  ?? null,
     createdAt:      now,
     updatedAt:      now,
     deletedAt:      null,

@@ -6,11 +6,18 @@
 import { formatTHB, formatMonth } from '../format.js';
 import { currentMonth } from '../schema.js';
 import { getSubscriptions, getUpcomingBills, paySubscription } from '../subscriptions.js';
+import {
+  getGroupPools,
+  formatMemberBalanceStatus,
+  generateReminderMessage,
+  calculatePoolStats,
+  runPoolCycle,
+} from '../group-pool.js';
 import { renderIcon } from '../icons.js';
 
-export async function initBudget(container, store, { showToast, tab = 'budget' }) {
+export async function initBudget(container, store, { showToast, showConfirm, tab = 'budget' }) {
   let month = currentMonth();
-  let activeTab = tab || 'budget'; // 'budget' | 'subscriptions'
+  let activeTab = tab || 'budget'; // 'budget' | 'subscriptions' | 'pools'
 
   async function render() {
     const [budgets, templates, txs, categories, accounts] = await Promise.all([
@@ -26,6 +33,7 @@ export async function initBudget(container, store, { showToast, tab = 'budget' }
 
     const spendMap = {};
     for (const tx of txs) {
+      if (tx.isAdvance || tx.isPoolExpense) continue;
       spendMap[tx.categoryId] = (spendMap[tx.categoryId] || 0) + tx.amountMinor;
     }
 
@@ -88,14 +96,21 @@ export async function initBudget(container, store, { showToast, tab = 'budget' }
             <button type="button" class="view-mode-btn ${activeTab === 'subscriptions' ? 'active' : ''}" data-tab="subscriptions">
               ${renderIcon('repeat', 14)} บิลประจำ
             </button>
+            <button type="button" class="view-mode-btn ${activeTab === 'pools' ? 'active' : ''}" data-tab="pools">
+              ${renderIcon('users', 14)} ตี้หารบิล
+            </button>
           </div>
           ${activeTab === 'budget' ? `
             <button class="btn-primary btn-sm" id="btn-add-budget">
               ${renderIcon('plus', 14)} ตั้งงบ
             </button>
-          ` : `
+          ` : activeTab === 'subscriptions' ? `
             <button class="btn-primary btn-sm" id="btn-add-sub">
               ${renderIcon('plus', 14)} เพิ่มบิล
+            </button>
+          ` : `
+            <button class="btn-primary btn-sm" id="btn-add-pool">
+              ${renderIcon('plus', 14)} เพิ่มตี้
             </button>
           `}
         </div>
@@ -104,7 +119,9 @@ export async function initBudget(container, store, { showToast, tab = 'budget' }
       <div class="page-body">
         ${activeTab === 'budget'
           ? renderBudgetView(totalBudget, totalSpent, totalPct, allItems, unbudgeted, templates)
-          : renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubsCount, catMap, accMap)}
+          : activeTab === 'subscriptions'
+          ? renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubsCount, catMap, accMap)
+          : renderGroupPoolsView(month, accMap)}
       </div>
     `;
 
@@ -161,6 +178,72 @@ export async function initBudget(container, store, { showToast, tab = 'budget' }
           render();
         } catch (err) {
           showToast(err.message, 'error');
+        }
+      });
+    });
+
+    // ── Group Pool Listeners ─────────────────────────────────
+    document.getElementById('btn-add-pool')?.addEventListener('click', () => window.openGroupPoolModal?.());
+    document.getElementById('btn-add-pool-empty')?.addEventListener('click', () => window.openGroupPoolModal?.());
+
+    container.querySelectorAll('.btn-edit-pool').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.openGroupPoolModal?.(btn.dataset.poolId);
+      });
+    });
+
+    container.querySelectorAll('.btn-cycle-pool').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const poolId = btn.dataset.poolId;
+        const pools = getGroupPools();
+        const pool = pools.find(p => p.id === poolId);
+        if (!pool) return;
+
+        const ok = await showConfirm(
+          'ยืนยันตัดรอบบิลตี้',
+          `ต้องการตัดรอบบิลประจำเดือน ${formatMonth(month)} สำหรับ "${pool.name}" และหักเครดิตสมาชิกทุกคนหรือไม่?`
+        );
+        if (!ok) return;
+
+        try {
+          await runPoolCycle({ poolId, monthStr: month, store });
+          showToast('ตัดรอบบิลและอัปเดตยอดสมาชิกเรียบร้อยแล้ว');
+          render();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-topup-member').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const { poolId, memberId } = btn.dataset;
+        window.openPoolTopUpModal?.(poolId, memberId, render);
+      });
+    });
+
+    container.querySelectorAll('.btn-remind-member').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const { poolId, memberId } = btn.dataset;
+        const pools = getGroupPools();
+        const pool = pools.find(p => p.id === poolId);
+        if (!pool) return;
+        const member = pool.members.find(m => m.id === memberId);
+        if (!member) return;
+
+        const acc = accMap[pool.accountId];
+        const accountInfo = acc ? acc.name : '';
+        const msg = generateReminderMessage({ pool, member, accountInfo });
+
+        try {
+          await navigator.clipboard.writeText(msg);
+          showToast(`คัดลอกข้อความทวงเงินของ ${member.name} แล้ว (ส่ง LINE ได้ทันที)`);
+        } catch {
+          showToast('ไม่สามารถคัดลอกได้อัตโนมัติ กรุณาลองใหม่', 'error');
         }
       });
     });
@@ -399,6 +482,117 @@ function renderSubscriptionsView(allSubs, upcomingBills, totalSubMinor, paidSubs
         }).join('')}
       </div>
     </div>
+  `;
+}
+
+function renderGroupPoolsView(month, accMap) {
+  const pools = getGroupPools();
+  const allStats = pools.map(p => calculatePoolStats(p));
+  const totalNetBalanceMinor = allStats.reduce((s, st) => s + st.netPoolBalanceMinor, 0);
+  const totalPrepaidMinor = allStats.reduce((s, st) => s + st.totalPrepaidMinor, 0);
+  const totalDebtMinor = allStats.reduce((s, st) => s + st.totalDebtMinor, 0);
+
+  if (pools.length === 0) {
+    return `
+      <div class="card empty-state-card" style="text-align:center;padding:48px 20px">
+        <div style="font-size:36px;margin-bottom:12px">${renderIcon('users', 36)}</div>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:6px">ยังไม่มีตี้หารบิล</h3>
+        <p style="font-size:13px;color:var(--text-secondary);max-width:340px;margin:0 auto 16px">
+          รวมเงินเพื่อนจ่ายบิลประจำ จัดการยอดโอนล่วงหน้า และติดตามยอดค้างชำระรายคนได้ง่ายๆ
+        </p>
+        <button type="button" class="btn-primary" id="btn-add-pool-empty">
+          ${renderIcon('plus', 14)} สร้างตี้หารบิล
+        </button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card budget-overview">
+      <div class="budget-overview-header">
+        <div>
+          <div class="stat-label">เงินกองกลางสุทธิ (ทุกตี้)</div>
+          <div class="budget-big-num mono" style="color:${totalNetBalanceMinor >= 0 ? 'var(--income)' : 'var(--expense)'}">
+            ${formatTHB(totalNetBalanceMinor)}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="stat-label">สถานะเพื่อนร่วมตี้</div>
+          <div style="font-size:13px;font-weight:600;margin-top:4px">
+            <span style="color:var(--income)">โอนล่วงหน้า +${formatTHB(totalPrepaidMinor)}</span>
+            ${totalDebtMinor > 0 ? `<br><span style="color:var(--expense)">ค้างจ่าย -${formatTHB(totalDebtMinor)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${pools.map(pool => {
+      const acc = accMap[pool.accountId];
+      const isCycleDone = pool.lastCycleMonth === month;
+
+      return `
+        <div class="card pool-card" data-pool-id="${pool.id}">
+          <div class="pool-card-header">
+            <div class="pool-title-group">
+              <span class="pool-icon">${renderIcon(pool.icon || 'users', 20)}</span>
+              <div>
+                <div class="pool-name">
+                  ${pool.name}
+                  ${isCycleDone ? '<span class="badge-advance settled">ตัดรอบบิลแล้ว</span>' : ''}
+                </div>
+                <div class="pool-meta">
+                  ตัดทุกวันที่ ${pool.dueDay} · บัญชี: ${acc?.name || 'บัญชีกองกลาง'} · บิลรวม: ${formatTHB(pool.amountMinor)}
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              ${!isCycleDone ? `
+                <button type="button" class="btn-primary btn-xs btn-cycle-pool" data-pool-id="${pool.id}">
+                  ${renderIcon('repeat', 12)} ตัดรอบบิล
+                </button>
+              ` : ''}
+              <button type="button" class="btn-ghost btn-xs btn-edit-pool" data-pool-id="${pool.id}">
+                แก้ไข
+              </button>
+            </div>
+          </div>
+
+          <div class="pool-members-list">
+            ${pool.members.map(member => {
+              const status = formatMemberBalanceStatus(member);
+              const badgeClass = status.type === 'prepaid' ? 'badge-advance settled' : (status.type === 'debt' ? 'badge-advance debt' : 'badge-advance neutral');
+              const sign = member.balanceMinor > 0 ? '+' : '';
+
+              return `
+                <div class="pool-member-row" data-member-id="${member.id}">
+                  <div class="pool-member-left">
+                    <span class="pool-member-name">
+                      ${member.name} ${member.isSelf ? '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px">เรา</span>' : ''}
+                      <span class="${badgeClass}">
+                        ${sign}${formatTHB(member.balanceMinor)} (${status.label})
+                      </span>
+                    </span>
+                    <span class="pool-member-subtext">
+                      ยอดหาร: ${formatTHB(member.shareAmountMinor)} / เดือน
+                    </span>
+                  </div>
+                  <div class="pool-member-right">
+                    <button type="button" class="btn-ghost btn-xs btn-topup-member" data-pool-id="${pool.id}" data-member-id="${member.id}">
+                      ${renderIcon('plus', 12)} เติมเงิน
+                    </button>
+                    ${status.type === 'debt' && !member.isSelf ? `
+                      <button type="button" class="btn-ghost btn-xs btn-remind-member" data-pool-id="${pool.id}" data-member-id="${member.id}" title="คัดลอกข้อความทวงเงิน">
+                        ${renderIcon('send', 12)} ทวง
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('')}
   `;
 }
 

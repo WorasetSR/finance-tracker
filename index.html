@@ -545,6 +545,111 @@
   </div>
 </div>
 
+<!-- ── MODAL: ADD / EDIT GROUP POOL (ตี้หารบิล) ──────────── -->
+<div id="group-pool-modal" class="modal-overlay hidden">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h2 id="group-pool-modal-title">ตี้หารบิล / Group Pool</h2>
+      <button class="modal-close" data-close="group-pool-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="group-pool-form" autocomplete="off">
+        <input type="hidden" id="pool-id" />
+        <div class="field">
+          <label for="pool-name">ชื่อตี้ / บริการ</label>
+          <input type="text" id="pool-name" placeholder="เช่น ตี้ Netflix 4 คน, ค่าไฟ+เน็ต คอนโด" required />
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;min-width:0">
+            <label for="pool-amount">ยอดบิลรวมต่อรอบ (฿)</label>
+            <input type="number" id="pool-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="ยอดบิลรวม" />
+          </div>
+          <div class="field" style="width:110px;flex-shrink:0">
+            <label for="pool-due-day">ตัดทุกวันที่</label>
+            <input type="number" id="pool-due-day" min="1" max="31" placeholder="1-31" value="1" required />
+          </div>
+        </div>
+        <div class="field">
+          <label for="pool-account">บัญชีกองกลาง / บัญชีตัดเงิน</label>
+          <select id="pool-account" required></select>
+        </div>
+        <div class="field">
+          <label>สัญลักษณ์</label>
+          <div class="icon-picker" id="pool-icon-picker"></div>
+        </div>
+
+        <div class="field" style="margin-top:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <label style="margin:0;font-weight:700">สมาชิกในตี้และยอดหาร</label>
+            <button type="button" class="btn-ghost btn-xs" id="btn-add-pool-member">+ เพิ่มเพื่อน</button>
+          </div>
+          <div id="pool-members-container" style="display:flex;flex-direction:column;gap:8px">
+            <!-- Dynamic member rows rendered by JS -->
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="pool-note">โน้ตเพิ่มเติม</label>
+          <input type="text" id="pool-note" placeholder="เช่น บัญชีกองกลางเปิดไว้รับเงินเพื่อนโดยเฉพาะ" />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-pool" class="btn-danger hidden">ลบตี้</button>
+          <div class="modal-actions-right">
+            <button type="button" class="btn-ghost" data-close="group-pool-modal">ยกเลิก</button>
+            <button type="submit" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: TOP-UP POOL MEMBER (เติมเงิน / บันทึกยอดโอน) ──── -->
+<div id="pool-topup-modal" class="modal-overlay hidden">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="pool-topup-modal-title">เติมเงินเข้าตี้</h2>
+      <button class="modal-close" data-close="pool-topup-modal" aria-label="ปิด">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="pool-topup-form" autocomplete="off">
+        <input type="hidden" id="topup-pool-id" />
+        <input type="hidden" id="topup-member-id" />
+        <div class="field">
+          <div id="topup-info-badge" style="padding:10px 12px;background:var(--surface-2);border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:4px">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+        <div class="field">
+          <label for="topup-amount">จำนวนเงินที่โอนเข้ามา (฿)</label>
+          <input type="number" id="topup-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินเติม" autofocus />
+        </div>
+        <div class="field">
+          <label for="topup-date">วันที่โอน</label>
+          <input type="date" id="topup-date" required />
+        </div>
+        <div class="field">
+          <label for="topup-note">บันทึกช่วยจำ</label>
+          <input type="text" id="topup-note" placeholder="เช่น โอนล่วงหน้า 6 เดือน, สลิป KBank..." />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-close="pool-topup-modal">ยกเลิก</button>
+          <button type="submit" class="btn-primary">บันทึกยอดเงิน</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL: BATCH SLIP INGESTION (COMPACT MOBILE VIEW) ── -->
 <div id="slip-modal" class="modal-overlay hidden">
   <div class="modal modal-lg">

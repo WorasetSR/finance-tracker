@@ -353,6 +353,10 @@ export class LocalStore {
       if (t.isAdvance) continue;
       // Exclude debt settlement from user personal income
       if (t.isAdvanceSettlement) continue;
+      // Exclude group pool deposits from personal income
+      if (t.isPoolDeposit) continue;
+      // Exclude group pool expenses from personal expenses
+      if (t.isPoolExpense) continue;
       if (t.type === 'income')  income  += t.amountMinor;
       if (t.type === 'expense') expense += t.amountMinor;
     }
