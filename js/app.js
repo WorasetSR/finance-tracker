@@ -648,7 +648,7 @@ function renderTxSplitItems() {
         <select class="split-item-cat" style="flex:1" data-id="${item.id}">
           ${catOpts(item.categoryId)}
         </select>
-        <input type="number" step="any" class="mono split-item-amt" data-id="${item.id}" value="${(item.amountMinor / 100).toFixed(2)}" placeholder="0.00" style="width:110px;font-weight:700" />
+        <input type="number" step="any" class="mono split-item-amt" data-id="${item.id}" value="${(item.amountMinor / 100).toFixed(2)}" placeholder="0.00" style="width:110px;font-weight:700" data-calculator data-label="จำนวนเงินรายการย่อย" inputmode="none" />
         ${txSplitItems.length > 1 ? `<button type="button" class="icon-btn btn-del-tx-split" data-id="${item.id}" title="ลบรายการนี้" style="color:var(--expense)">✕</button>` : ''}
       </div>
       <div class="split-row-bottom">
@@ -1087,7 +1087,7 @@ function renderSplitItems() {
         <select class="split-item-cat" style="flex:1" data-id="${item.id}">
           ${catOpts(item.categoryId)}
         </select>
-        <input type="number" step="any" class="mono split-item-amt" data-id="${item.id}" value="${(item.amountMinor / 100).toFixed(2)}" placeholder="0.00" style="width:110px;font-weight:700" />
+        <input type="number" step="any" class="mono split-item-amt" data-id="${item.id}" value="${(item.amountMinor / 100).toFixed(2)}" placeholder="0.00" style="width:110px;font-weight:700" data-calculator data-label="จำนวนเงินรายการย่อย" inputmode="none" />
         ${splitItems.length > 1 ? `<button type="button" class="icon-btn btn-del-split" data-id="${item.id}" title="ลบรายการนี้" style="color:var(--expense)">✕</button>` : ''}
       </div>
       <div class="split-row-bottom">
@@ -1962,7 +1962,7 @@ function renderPoolMemberInputRow(m = {}) {
   div.innerHTML = `
     <input type="hidden" class="pmem-id" value="${m.id || ''}" />
     <input type="text" class="pmem-name" placeholder="ชื่อเพื่อน" value="${m.name || ''}" style="flex:1.2;min-width:0" required />
-    <input type="number" class="pmem-share mono-input" placeholder="ยอดหาร (฿)" value="${m.shareAmountMinor ? (m.shareAmountMinor / 100).toFixed(0) : ''}" style="flex:1;min-width:0" step="any" min="0" required />
+    <input type="number" class="pmem-share mono-input" placeholder="ยอดหาร (฿)" value="${m.shareAmountMinor ? (m.shareAmountMinor / 100).toFixed(0) : ''}" style="flex:1;min-width:0" step="any" min="0" required data-calculator data-label="ยอดหารต่อคน" inputmode="none" />
     <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
       <input type="checkbox" class="pmem-self" ${m.isSelf ? 'checked' : ''} /> เรา
     </label>
@@ -2780,6 +2780,32 @@ export function showToast(message, type = 'success') {
 
 let _calcTarget = null;
 let _calcExpr   = '';
+let _calcFresh  = false;
+
+export function isCalcInput(el) {
+  if (!el || el.tagName !== 'INPUT') return false;
+  if ('calculator' in el.dataset) return true;
+  if (['checkbox', 'radio', 'submit', 'button', 'file', 'hidden', 'date', 'search'].includes(el.type)) return false;
+  if (el.classList?.contains?.('split-item-amt')) return true;
+  if (el.classList?.contains?.('pmem-share')) return true;
+  if (el.id === 'slip-amount') return true;
+  if (el.type === 'number') return true;
+  return false;
+}
+
+export function getCalcInputLabel(el) {
+  if (el.dataset?.label) return el.dataset.label;
+  if (el.id === 'slip-amount') return 'จำนวนเงินจากสลิป';
+  if (el.id === 'sub-due-day' || el.id === 'pool-due-day') return 'วันที่ตัดรอบ (1-31)';
+  if (el.classList?.contains?.('split-item-amt')) return 'จำนวนเงินรายการย่อย';
+  if (el.classList?.contains?.('pmem-share')) return 'ยอดหารต่อคน';
+  const labelEl = el.id ? document.querySelector(`label[for="${el.id}"]`) : null;
+  if (labelEl?.textContent) return labelEl.textContent.trim();
+  const parentField = el.closest?.('.field');
+  const parentLabel = parentField?.querySelector?.('label');
+  if (parentLabel?.textContent) return parentLabel.textContent.trim();
+  return el.placeholder || 'จำนวนเงิน';
+}
 
 function calcEval(expr) {
   if (!expr || typeof expr !== 'string') return 0;
@@ -2843,8 +2869,8 @@ function showCalc(inputEl) {
   _calcTarget = inputEl;
   const raw = String(inputEl.value || '').replace(/[^0-9.]/g, '');
   _calcExpr = raw;
-  document.getElementById('calc-label').textContent =
-    inputEl.dataset.label || 'จำนวน';
+  _calcFresh = Boolean(raw && raw !== '0' && raw !== '0.00');
+  document.getElementById('calc-label').textContent = getCalcInputLabel(inputEl);
   document.getElementById('calc-display').textContent = _calcExpr || '0';
   document.getElementById('calc-overlay').classList.remove('hidden');
 }
@@ -2852,21 +2878,17 @@ function showCalc(inputEl) {
 function hideCalc() {
   document.getElementById('calc-overlay').classList.add('hidden');
   _calcTarget = null;
+  _calcFresh = false;
 }
 
-document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
-  if (e.target === document.getElementById('calc-overlay')) { hideCalc(); return; }
-
-  const btn = e.target.closest('[data-calc]');
-  if (!btn) return;
-  e.preventDefault();
-
-  const key = btn.dataset.calc;
+function handleCalcInputKey(key) {
   const display = document.getElementById('calc-display');
+  const ops = ['+', '-', '×', 'x', '*'];
 
-  if (key === '⌫') {
+  if (key === '⌫' || key === 'Backspace') {
     _calcExpr = _calcExpr.slice(0, -1);
-  } else if (key === '✓') {
+    _calcFresh = false;
+  } else if (key === '✓' || key === 'Enter') {
     const result = calcEval(_calcExpr);
     if (_calcTarget !== null) {
       const val = result !== null ? result : (parseFloat(_calcExpr) || 0);
@@ -2876,22 +2898,96 @@ document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
     }
     hideCalc();
     return;
+  } else if (key === 'Escape') {
+    hideCalc();
+    return;
   } else {
-    const ops = ['+', '-', '×'];
-    if (ops.includes(key) && ops.includes(_calcExpr.slice(-1))) {
-      _calcExpr = _calcExpr.slice(0, -1) + key;
+    const isOp = ops.includes(key);
+    const normalizedKey = (key === 'x' || key === '*') ? '×' : key;
+
+    if (_calcFresh) {
+      if (isOp) {
+        _calcExpr = (_calcExpr || '0') + normalizedKey;
+      } else if (key === '.') {
+        _calcExpr = '0.';
+      } else {
+        _calcExpr = normalizedKey;
+      }
+      _calcFresh = false;
+    } else if (isOp) {
+      if (['+', '-', '×'].includes(_calcExpr.slice(-1))) {
+        _calcExpr = _calcExpr.slice(0, -1) + normalizedKey;
+      } else {
+        _calcExpr += normalizedKey;
+      }
     } else {
-      _calcExpr += key;
+      if (_calcExpr === '0') {
+        _calcExpr = key === '.' ? '0.' : normalizedKey;
+      } else {
+        _calcExpr += normalizedKey;
+      }
     }
   }
 
-  display.textContent = _calcExpr || '0';
+  if (display) {
+    display.textContent = _calcExpr || '0';
+  }
+}
+
+document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
+  if (e.target === document.getElementById('calc-overlay')) { hideCalc(); return; }
+
+  const btn = e.target.closest('[data-calc]');
+  if (!btn) return;
+  e.preventDefault();
+
+  handleCalcInputKey(btn.dataset.calc);
 });
 
+// Desktop Physical Keyboard Support
+window.addEventListener('keydown', e => {
+  const overlay = document.getElementById('calc-overlay');
+  if (!overlay || overlay.classList.contains('hidden')) return;
+
+  if (e.key >= '0' && e.key <= '9') {
+    e.preventDefault();
+    handleCalcInputKey(e.key);
+  } else if (e.key === '.') {
+    e.preventDefault();
+    handleCalcInputKey('.');
+  } else if (['+', '-', '*', '/'].includes(e.key)) {
+    e.preventDefault();
+    handleCalcInputKey(e.key === '*' || e.key === '/' ? '×' : e.key);
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    handleCalcInputKey('⌫');
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    handleCalcInputKey('✓');
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    handleCalcInputKey('Escape');
+  }
+});
+
+// Robust touch & focus interception for all number/calc inputs
+document.addEventListener('pointerdown', e => {
+  const input = e.target.closest('input');
+  if (!input || !isCalcInput(input)) return;
+
+  // Prevent mobile software keyboard from appearing & trigger our calculator
+  e.preventDefault();
+  input.blur();
+  showCalc(input);
+}, true);
+
 document.addEventListener('focusin', e => {
-  const input = e.target;
-  if (input.tagName === 'INPUT' && 'calculator' in input.dataset) {
-    input.blur();
+  const input = e.target.closest('input');
+  if (!input || !isCalcInput(input)) return;
+
+  input.blur();
+  const overlay = document.getElementById('calc-overlay');
+  if (_calcTarget !== input || overlay?.classList.contains('hidden')) {
     showCalc(input);
   }
 }, true);

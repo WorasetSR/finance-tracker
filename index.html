@@ -282,7 +282,7 @@
         <div class="tx-hero-inputs">
           <div class="field tx-hero-amount-field">
             <label for="tx-amount">จำนวนเงิน (฿)</label>
-            <input type="number" id="tx-amount" class="mono-input tx-big-amount-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
+            <input type="number" id="tx-amount" class="mono-input tx-big-amount-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" inputmode="none" />
           </div>
           <div class="field tx-hero-date-field">
             <label for="tx-date">วันที่</label>
@@ -398,7 +398,7 @@
         </div>
         <div class="field">
           <label for="account-balance">ยอดเริ่มต้น (฿)</label>
-          <input type="number" id="account-balance" class="mono-input" placeholder="0.00" value="0" step="any" data-calculator data-label="ยอดเริ่มต้น" />
+          <input type="number" id="account-balance" class="mono-input" placeholder="0.00" value="0" step="any" data-calculator data-label="ยอดเริ่มต้น" inputmode="none" />
         </div>
         <div class="field">
           <label>สัญลักษณ์</label>
@@ -503,7 +503,7 @@
         </div>
         <div class="field">
           <label for="budget-limit">วงเงินงบประมาณ (฿)</label>
-          <input type="number" id="budget-limit" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="วงเงิน" />
+          <input type="number" id="budget-limit" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="วงเงิน" inputmode="none" />
         </div>
         <div class="modal-actions">
           <button type="button" id="btn-delete-budget" class="btn-danger hidden">ลบงบ</button>
@@ -538,11 +538,11 @@
         <div class="field-row">
           <div class="field" style="flex:1;min-width:0">
             <label for="sub-amount">จำนวนเงิน (฿)</label>
-            <input type="number" id="sub-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" />
+            <input type="number" id="sub-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงิน" inputmode="none" />
           </div>
           <div class="field" style="width:110px;flex-shrink:0">
             <label for="sub-due-day">ตัดทุกวันที่</label>
-            <input type="number" id="sub-due-day" min="1" max="31" placeholder="1-31" value="1" required />
+            <input type="number" id="sub-due-day" min="1" max="31" placeholder="1-31" value="1" required data-calculator data-label="วันที่ตัดรอบ (1-31)" inputmode="none" />
           </div>
         </div>
         <div class="field-row">
@@ -596,11 +596,11 @@
         <div class="field-row">
           <div class="field" style="flex:1;min-width:0">
             <label for="pool-amount">ยอดบิลรวมต่อรอบ (฿)</label>
-            <input type="number" id="pool-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="ยอดบิลรวม" />
+            <input type="number" id="pool-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="ยอดบิลรวม" inputmode="none" />
           </div>
           <div class="field" style="width:110px;flex-shrink:0">
             <label for="pool-due-day">ตัดทุกวันที่</label>
-            <input type="number" id="pool-due-day" min="1" max="31" placeholder="1-31" value="1" required />
+            <input type="number" id="pool-due-day" min="1" max="31" placeholder="1-31" value="1" required data-calculator data-label="วันที่ตัดรอบ (1-31)" inputmode="none" />
           </div>
         </div>
         <div class="field">
@@ -661,7 +661,7 @@
         </div>
         <div class="field">
           <label for="topup-amount">จำนวนเงินที่โอนเข้ามา (฿)</label>
-          <input type="number" id="topup-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินเติม" autofocus />
+          <input type="number" id="topup-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินเติม" inputmode="none" />
         </div>
         <div class="field">
           <label for="topup-date">วันที่โอน</label>
@@ -712,7 +712,7 @@
         </div>
         <div class="field">
           <label for="fund-amount">จำนวนเงินที่โอน (฿)</label>
-          <input type="number" id="fund-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินโอน" autofocus />
+          <input type="number" id="fund-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินโอน" inputmode="none" />
         </div>
         <div class="field">
           <label for="fund-date">วันที่โอน</label>
@@ -756,7 +756,7 @@
         </div>
         <div class="field">
           <label for="settle-adv-amount">จำนวนเงินที่ได้รับคืน (฿)</label>
-          <input type="number" id="settle-adv-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินคืน" />
+          <input type="number" id="settle-adv-amount" class="mono-input" placeholder="0.00" min="0" step="any" required data-calculator data-label="จำนวนเงินคืน" inputmode="none" />
         </div>
         <div class="field">
           <label for="settle-adv-date">วันที่ได้รับเงิน</label>
@@ -835,7 +835,7 @@
               <div class="slip-amount-date-row">
                 <div class="slip-amt-wrap">
                   <span class="slip-currency-prefix">฿</span>
-                  <input type="text" inputmode="decimal" id="slip-amount" class="mono slip-big-amt" required />
+                  <input type="text" inputmode="none" id="slip-amount" class="mono slip-big-amt" required data-calculator data-label="จำนวนเงินจากสลิป" />
                 </div>
                 <input type="date" id="slip-date" class="slip-compact-date" required />
               </div>
