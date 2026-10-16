@@ -474,6 +474,9 @@ function renderChipSelector(chipContainerId, selectId, items, selectedId = null,
 // ── Transaction modal (1-Tap Chip Selectors) ─────────────────
 
 let txModalEditId = null;
+let txIsSplitMode = false;
+let txSplitItems = [];
+let txLoadedCategories = [];
 
 async function openTxModal(txId = null) {
   txModalEditId = txId;
@@ -486,6 +489,10 @@ async function openTxModal(txId = null) {
     store.getAccounts(),
     store.getCategories(),
   ]);
+
+  txLoadedCategories = categories;
+  setTxSplitMode(false);
+  txSplitItems = [];
 
   const expCats = categories.filter(c => c.type === 'expense' || c.type === 'both');
   const incCats = categories.filter(c => c.type === 'income'  || c.type === 'both');
@@ -567,8 +574,13 @@ async function setTxType(type, preferredCatId = null) {
   document.getElementById('grp-account')?.classList.toggle('hidden', isTransfer);
   document.getElementById('grp-from-account')?.classList.toggle('hidden', !isTransfer);
   document.getElementById('grp-to-account')?.classList.toggle('hidden', !isTransfer);
-  document.getElementById('grp-category')?.classList.toggle('hidden', isTransfer);
+  document.getElementById('grp-category')?.classList.toggle('hidden', isTransfer || txIsSplitMode);
   document.getElementById('grp-advance')?.classList.toggle('hidden', type !== 'expense');
+  document.getElementById('grp-tx-mode-bar')?.classList.toggle('hidden', isTransfer);
+
+  if (isTransfer && txIsSplitMode) {
+    setTxSplitMode(false);
+  }
 
   if (!isTransfer) {
     const cats = await store.getCategories();
@@ -577,6 +589,190 @@ async function setTxType(type, preferredCatId = null) {
     renderChipSelector('tx-category-chips', 'tx-category', filtered, curSel, 'box');
   }
 }
+
+function setTxSplitMode(enabled) {
+  txIsSplitMode = enabled;
+  const toggleBtn = document.getElementById('btn-tx-toggle-split');
+  const singleSec = document.getElementById('tx-single-section');
+  const splitSec  = document.getElementById('tx-split-section');
+
+  if (toggleBtn) {
+    toggleBtn.innerHTML = enabled
+      ? `${renderIcon('chevron-left', 13)}<span>รวมเป็น 1 รายการ</span>`
+      : `${renderIcon('split', 13)}<span>แยกหลายหมวด</span>`;
+  }
+  singleSec?.classList.toggle('hidden', enabled);
+  splitSec?.classList.toggle('hidden', !enabled);
+
+  if (enabled) {
+    if (!txSplitItems.length) {
+      const activeTabs = document.querySelector('#tx-type-tabs .type-tab.active');
+      const curType = activeTabs?.dataset.type || 'expense';
+      const fullAmtMinor = parseAmount(document.getElementById('tx-amount')?.value) || 0;
+      const filteredCats = txLoadedCategories.filter(c => c.type === curType || c.type === 'both');
+      const curCatId = document.getElementById('tx-category')?.value || (filteredCats[0]?.id || 'cat_food');
+      const note = document.getElementById('tx-note')?.value || '';
+      txSplitItems = [{
+        id: Math.random().toString(36).slice(2, 8),
+        categoryId: curCatId,
+        amountMinor: fullAmtMinor,
+        note: note,
+        isAdvance: false,
+        advanceTo: '',
+      }];
+    }
+    renderTxSplitItems();
+  }
+}
+
+function renderTxSplitItems() {
+  const container = document.getElementById('tx-split-items-container');
+  updateTxCountdownBannerOnly();
+  if (!container) return;
+
+  const activeTabs = document.querySelector('#tx-type-tabs .type-tab.active');
+  const curType = activeTabs?.dataset.type || 'expense';
+  const filteredCats = txLoadedCategories.filter(c => c.type === curType || c.type === 'both');
+  const catOpts = (selectedCatId) => filteredCats
+    .map(c => `<option value="${c.id}" ${c.id === selectedCatId ? 'selected' : ''}>${c.name}</option>`)
+    .join('');
+
+  container.innerHTML = txSplitItems.map(item => `
+    <div class="split-row" data-id="${item.id}">
+      <div class="split-row-top">
+        <select class="split-item-cat" style="flex:1" data-id="${item.id}">
+          ${catOpts(item.categoryId)}
+        </select>
+        <input type="number" step="any" class="mono split-item-amt" data-id="${item.id}" value="${(item.amountMinor / 100).toFixed(2)}" placeholder="0.00" style="width:110px;font-weight:700" />
+        ${txSplitItems.length > 1 ? `<button type="button" class="icon-btn btn-del-tx-split" data-id="${item.id}" title="ลบรายการนี้" style="color:var(--expense)">✕</button>` : ''}
+      </div>
+      <div class="split-row-bottom">
+        <input type="text" class="split-item-note" data-id="${item.id}" value="${item.note || ''}" placeholder="โน้ตย่อย (เช่น ข้าว/ของสด, ขนม)" style="flex:1;font-size:12px" />
+        ${curType === 'expense' ? `
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" class="split-item-advance-check" data-id="${item.id}" ${item.isAdvance ? 'checked' : ''} />
+            <span>ฝากจ่าย</span>
+          </label>
+        ` : ''}
+      </div>
+      <div class="split-advance-box ${item.isAdvance ? '' : 'hidden'}" id="tx-adv-box-${item.id}">
+        <input type="text" class="split-item-advance-to" data-id="${item.id}" value="${item.advanceTo || ''}" placeholder="ระบุชื่อเพื่อน (เช่น บอย)" style="font-size:12px;padding:4px 8px;width:100%" />
+      </div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.split-item-amt').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = txSplitItems.find(x => x.id === inp.dataset.id);
+      if (it) {
+        it.amountMinor = parseAmount(inp.value);
+        updateTxCountdownBannerOnly();
+      }
+    });
+  });
+
+  container.querySelectorAll('.split-item-cat').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const it = txSplitItems.find(x => x.id === sel.dataset.id);
+      if (it) it.categoryId = sel.value;
+    });
+  });
+
+  container.querySelectorAll('.split-item-note').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = txSplitItems.find(x => x.id === inp.dataset.id);
+      if (it) it.note = inp.value;
+    });
+  });
+
+  container.querySelectorAll('.split-item-advance-check').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const it = txSplitItems.find(x => x.id === chk.dataset.id);
+      if (it) {
+        it.isAdvance = chk.checked;
+        const advBox = document.getElementById(`tx-adv-box-${it.id}`);
+        advBox?.classList.toggle('hidden', !chk.checked);
+        if (chk.checked) it.categoryId = 'cat_advance';
+      }
+    });
+  });
+
+  container.querySelectorAll('.split-item-advance-to').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = txSplitItems.find(x => x.id === inp.dataset.id);
+      if (it) it.advanceTo = inp.value;
+    });
+  });
+
+  container.querySelectorAll('.btn-del-tx-split').forEach(btn => {
+    btn.addEventListener('click', () => {
+      txSplitItems = txSplitItems.filter(x => x.id !== btn.dataset.id);
+      renderTxSplitItems();
+    });
+  });
+}
+
+function updateTxCountdownBannerOnly() {
+  const banner = document.getElementById('tx-split-countdown-banner');
+  const remainingVal = document.getElementById('tx-split-remaining-val');
+  const fullAmtMinor = parseAmount(document.getElementById('tx-amount')?.value) || 0;
+
+  const allocatedMinor = txSplitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
+  const remainingMinor = fullAmtMinor - allocatedMinor;
+
+  if (banner && remainingVal) {
+    banner.className = 'split-banner';
+    if (remainingMinor === 0) {
+      banner.classList.add('matched');
+      banner.querySelector('span:first-child').textContent = 'จัดสรรครบลงตัวพอดี:';
+      remainingVal.textContent = '0.00 ฿';
+    } else if (remainingMinor > 0) {
+      banner.classList.add('pending');
+      banner.querySelector('span:first-child').textContent = 'คงเหลือต้องจัดสรร:';
+      remainingVal.textContent = `${(remainingMinor / 100).toFixed(2)} ฿`;
+    } else {
+      banner.classList.add('over');
+      banner.querySelector('span:first-child').textContent = 'เกินยอดรวมไป:';
+      remainingVal.textContent = `${(Math.abs(remainingMinor) / 100).toFixed(2)} ฿`;
+    }
+  }
+}
+
+document.getElementById('tx-amount')?.addEventListener('input', () => {
+  if (txIsSplitMode) updateTxCountdownBannerOnly();
+});
+
+document.getElementById('btn-tx-toggle-split')?.addEventListener('click', () => {
+  setTxSplitMode(!txIsSplitMode);
+});
+
+document.getElementById('btn-tx-add-split-item')?.addEventListener('click', () => {
+  const fullAmountMinor = parseAmount(document.getElementById('tx-amount')?.value) || 0;
+  const allocatedMinor = txSplitItems.reduce((sum, item) => sum + (item.amountMinor || 0), 0);
+  const remainingMinor = Math.max(0, fullAmountMinor - allocatedMinor);
+  const activeTabs = document.querySelector('#tx-type-tabs .type-tab.active');
+  const curType = activeTabs?.dataset.type || 'expense';
+  const filteredCats = txLoadedCategories.filter(c => c.type === curType || c.type === 'both');
+  txSplitItems.push({
+    id: Math.random().toString(36).slice(2, 8),
+    categoryId: filteredCats[0]?.id || 'cat_food',
+    amountMinor: remainingMinor,
+    note: '',
+    isAdvance: false,
+    advanceTo: '',
+  });
+  renderTxSplitItems();
+});
+
+document.getElementById('btn-tx-fill-remaining')?.addEventListener('click', () => {
+  const fullAmountMinor = parseAmount(document.getElementById('tx-amount')?.value) || 0;
+  const allocatedMinor = txSplitItems.reduce((sum, item) => sum + (item.amountMinor || 0), 0);
+  const remainingMinor = fullAmountMinor - allocatedMinor;
+  if (remainingMinor > 0 && txSplitItems.length > 0) {
+    txSplitItems[txSplitItems.length - 1].amountMinor += remainingMinor;
+    renderTxSplitItems();
+  }
+});
 
 document.getElementById('tx-type-tabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.type-tab');
@@ -599,6 +795,47 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
 
   if (!amountMinor || amountMinor <= 0) {
     showToast('กรุณาระบุจำนวนเงิน', 'error');
+    return;
+  }
+
+  // Handle Split Mode in Manual Transaction Modal
+  if (txIsSplitMode && type !== 'transfer') {
+    const allocatedMinor = txSplitItems.reduce((s, it) => s + (it.amountMinor || 0), 0);
+    if (allocatedMinor !== amountMinor) {
+      showToast('กรุณาจัดสรรยอดให้ลงตัวพอดี 0.00 ฿ ก่อนบันทึก', 'error');
+      return;
+    }
+
+    const accountId = document.getElementById('tx-account').value;
+    const splitGroupId = genId('split');
+    for (const item of txSplitItems) {
+      if (!item.amountMinor || item.amountMinor <= 0) continue;
+      const isAdv = type === 'expense' && Boolean(item.isAdvance);
+      const tx = makeTransaction({
+        type,
+        amountMinor: item.amountMinor,
+        date,
+        accountId,
+        categoryId: isAdv ? 'cat_advance' : item.categoryId,
+        note: item.note,
+        splitGroupId,
+        isAdvance: isAdv,
+        advanceTo: isAdv ? (item.advanceTo || 'เพื่อน') : '',
+        advanceStatus: isAdv ? 'pending' : null,
+      });
+
+      await store.put('transactions', tx);
+      await store.addToPendingQueue({ id: tx.id, store: 'transactions', op: 'create' });
+      syncTransaction(tx).catch(console.error);
+
+      if (!isAdv && item.categoryId && item.note) {
+        learnHabit({ memo: item.note, categoryId: item.categoryId });
+      }
+    }
+
+    closeModal('tx-modal');
+    showToast('บันทึกแยกหลายหมวดเรียบร้อยแล้ว');
+    refreshPage();
     return;
   }
 

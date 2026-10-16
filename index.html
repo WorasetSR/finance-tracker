@@ -311,28 +311,53 @@
           <select id="tx-to-account" class="sr-only-select"></select>
         </div>
 
-        <!-- Category (1-Tap Chips + Hidden Select) -->
-        <div class="field" id="grp-category">
-          <label for="tx-category">หมวดหมู่</label>
-          <div id="tx-category-chips" class="quick-chip-grid cat-chip-selector"></div>
-          <select id="tx-category" class="sr-only-select"></select>
+        <!-- Single Item Fields (Category & Note) -->
+        <div id="tx-single-section">
+          <!-- Category (1-Tap Chips + Hidden Select) -->
+          <div class="field" id="grp-category">
+            <label for="tx-category">หมวดหมู่</label>
+            <div id="tx-category-chips" class="quick-chip-grid cat-chip-selector"></div>
+            <select id="tx-category" class="sr-only-select"></select>
+          </div>
+
+          <!-- Note -->
+          <div class="field">
+            <label for="tx-note">บันทึกช่วยจำ / #แท็ก</label>
+            <input type="text" id="tx-note" placeholder="เช่น กาแฟ, ข้าวเที่ยง #งาน (ไม่บังคับ)" />
+          </div>
         </div>
 
-        <!-- Note -->
-        <div class="field">
-          <label for="tx-note">บันทึกช่วยจำ / #แท็ก</label>
-          <input type="text" id="tx-note" placeholder="เช่น กาแฟ, ข้าวเที่ยง #งาน (ไม่บังคับ)" />
-        </div>
-
-        <!-- Advance Toggle (เพื่อนฝากจ่ายก่อน) -->
-        <div class="field" id="grp-advance" style="margin-top:4px;margin-bottom:4px">
-          <label class="advance-toggle-pill">
+        <!-- Quick Action Toggles: Advance & Split -->
+        <div class="slip-mode-bar" id="grp-tx-mode-bar" style="margin-top:6px;margin-bottom:8px">
+          <label class="advance-toggle-pill" id="grp-advance" style="margin:0">
             <input type="checkbox" id="tx-is-advance" />
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span>ออกให้คนอื่นก่อน (รอเก็บเงินคืน)</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>ออกให้คนอื่นก่อน</span>
           </label>
-          <div id="tx-advance-details" class="hidden" style="margin-top:8px">
-            <input type="text" id="tx-advance-to" placeholder="ระบุชื่อเพื่อนที่ฝากจ่าย (เช่น บอย, มายด์)" />
+          <button type="button" class="btn-ghost btn-xs" id="btn-tx-toggle-split" style="gap:4px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg>
+            <span>แยกหลายหมวด</span>
+          </button>
+        </div>
+
+        <div id="tx-advance-details" class="hidden" style="margin-bottom:10px">
+          <input type="text" id="tx-advance-to" placeholder="ระบุชื่อเพื่อนที่ฝากจ่าย (เช่น บอย, มายด์)" />
+        </div>
+
+        <!-- Split Items Section (Shown when user clicks แยกหลายหมวด) -->
+        <div id="tx-split-section" class="hidden" style="margin-bottom:12px">
+          <div id="tx-split-countdown-banner" class="split-banner pending">
+            <span>คงเหลือต้องจัดสรร:</span>
+            <span id="tx-split-remaining-val" class="mono" style="font-size:14px;font-weight:700">0.00 ฿</span>
+          </div>
+          <div id="tx-split-items-container" class="split-items-container"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button type="button" class="btn-ghost btn-xs" id="btn-tx-add-split-item" style="flex:1;border:1px dashed var(--border)">
+              + เพิ่มรายการย่อย
+            </button>
+            <button type="button" class="btn-ghost btn-xs" id="btn-tx-fill-remaining" style="border:1px solid var(--border)" title="นำยอดคงเหลือไปใส่ในรายการล่าสุด">
+              เติมยอดคงเหลือ
+            </button>
           </div>
         </div>
 
