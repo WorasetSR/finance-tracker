@@ -819,6 +819,11 @@ document.getElementById('tx-form')?.addEventListener('submit', async (e) => {
     }
 
     const accountId = document.getElementById('tx-account').value;
+    if (editId) {
+      await store.softDelete('transactions', editId);
+      await store.addToPendingQueue({ id: editId, store: 'transactions', op: 'delete' });
+      deleteSupabaseTransaction(editId).catch(console.error);
+    }
     const splitGroupId = genId('split');
     for (const item of txSplitItems) {
       if (!item.amountMinor || item.amountMinor <= 0) continue;
@@ -1654,27 +1659,28 @@ document.getElementById('btn-archive-account')?.addEventListener('click', async 
   if (!editId) return;
   const existing = await store.get('accounts', editId);
   if (!existing) return;
-  const isArchived = !existing.archived;
-  const action = isArchived ? 'กู้คืน' : 'จัดเก็บ';
+  const willArchive = !existing.archived;
+  const action = willArchive ? 'จัดเก็บ' : 'กู้คืน';
   const ok = await showConfirm(
     action + 'บัญชี',
-    isArchived
-      ? 'ต้องการกู้คืนบัญชีนี้กลับมาใช้งานหรือไม่?'
-      : 'ต้องการจัดเก็บบัญชีนี้? จะถูกซ่อนจากทุกที่ รายการเดิมยังคงอยู่'
+    willArchive
+      ? 'ต้องการจัดเก็บบัญชีนี้? จะถูกซ่อนจากทุกที่ รายการเดิมยังคงอยู่'
+      : 'ต้องการกู้คืนบัญชีนี้กลับมาใช้งานหรือไม่?'
   );
   if (!ok) return;
-  Object.assign(existing, { archived: !isArchived, updatedAt: new Date().toISOString(), synced: false });
+  Object.assign(existing, { archived: willArchive, updatedAt: new Date().toISOString(), synced: true });
   await store.put('accounts', existing);
   await store.addToPendingQueue({ id: editId, store: 'accounts', op: 'update' });
-  updateSyncWidget('pending');
+  syncAccount(existing).catch(console.error);
+  updateSyncWidget('synced');
   closeModal('account-modal');
-  showToast(isArchived ? 'กู้คืนบัญชีแล้ว' : 'จัดเก็บบัญชีแล้ว');
+  showToast(willArchive ? 'จัดเก็บบัญชีแล้ว' : 'กู้คืนบัญชีแล้ว');
   refreshPage();
 });
 
 // ── Category modal ────────────────────────────────────────────
 
-window.openCategoryModal = async function(catId = null) {
+window.openCategoryModal = async function(catId = null, defaultType = 'expense') {
   const titleEl   = document.getElementById('category-modal-title');
   const deleteBtn = document.getElementById('btn-delete-category');
   const idInput   = document.getElementById('category-id');
@@ -1694,7 +1700,9 @@ window.openCategoryModal = async function(catId = null) {
     deleteBtn.classList.add('hidden');
     idInput.value = '';
     document.getElementById('category-name').value = '';
-    document.querySelector('input[name="cat-type"][value="expense"]').checked = true;
+    const targetType = ['expense', 'income', 'both'].includes(defaultType) ? defaultType : 'expense';
+    const radio = document.querySelector(`input[name="cat-type"][value="${targetType}"]`);
+    if (radio) radio.checked = true;
     setIconPicker('category-icon-picker', 'box');
   }
   openModal('category-modal');
@@ -2920,9 +2928,18 @@ function handleCalcInputKey(key) {
       } else {
         _calcExpr += normalizedKey;
       }
+    } else if (key === '.') {
+      const lastOp = Math.max(_calcExpr.lastIndexOf('+'), _calcExpr.lastIndexOf('-'), _calcExpr.lastIndexOf('×'));
+      const curOperand = lastOp >= 0 ? _calcExpr.slice(lastOp + 1) : _calcExpr;
+      if (curOperand.includes('.')) return;
+      if (!curOperand) {
+        _calcExpr += '0.';
+      } else {
+        _calcExpr += '.';
+      }
     } else {
       if (_calcExpr === '0') {
-        _calcExpr = key === '.' ? '0.' : normalizedKey;
+        _calcExpr = normalizedKey;
       } else {
         _calcExpr += normalizedKey;
       }

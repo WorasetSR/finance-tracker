@@ -175,10 +175,10 @@ export async function initAccounts(container, store, { showToast }) {
     });
 
     document.getElementById('btn-add-expense-cat')?.addEventListener('click', () => {
-      window.openCategoryModal?.();
+      window.openCategoryModal?.(null, 'expense');
     });
     document.getElementById('btn-add-income-cat')?.addEventListener('click', () => {
-      window.openCategoryModal?.();
+      window.openCategoryModal?.(null, 'income');
     });
 
     container.querySelectorAll('.edit-btn[data-account-id]').forEach(btn => {

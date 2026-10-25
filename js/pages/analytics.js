@@ -7,6 +7,7 @@ import { formatTHB, formatMonthShort } from '../format.js';
 import { currentMonth } from '../schema.js';
 import { getSubscriptions } from '../subscriptions.js';
 import { renderIcon } from '../icons.js';
+import { isPersonalExpense } from './transactions.js';
 
 let barChart    = null;
 let pieChart    = null;
@@ -18,19 +19,19 @@ export async function initAnalytics(container, store) {
   let catMonth    = endMonth;
 
   async function renderPieSection() {
-    const [categories, allTxs] = await Promise.all([
+    const [categories, monthTxs] = await Promise.all([
       store.getCategories(),
-      store.getTransactions({}),
+      store.getTransactions({ month: catMonth, type: 'expense' }),
     ]);
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
 
-    const monthTxs = allTxs.filter(t => t.date?.startsWith(catMonth) && t.type === 'expense');
+    const personalMonthTxs = monthTxs.filter(isPersonalExpense);
     const catTotals = {};
-    for (const tx of monthTxs) {
-      const cat = catMap[tx.categoryId];
-      if (!cat) continue;
-      catTotals[tx.categoryId] = catTotals[tx.categoryId] || { cat, total: 0 };
-      catTotals[tx.categoryId].total += tx.amountMinor;
+    for (const tx of personalMonthTxs) {
+      const cat = catMap[tx.categoryId] || { id: tx.categoryId || 'other', name: 'ไม่ระบุ', icon: 'box' };
+      const cId = cat.id || tx.categoryId || 'other';
+      catTotals[cId] = catTotals[cId] || { cat, total: 0 };
+      catTotals[cId].total += tx.amountMinor;
     }
     const catBreakdown = Object.values(catTotals).sort((a, b) => b.total - a.total);
     const totalExp = catBreakdown.reduce((s, e) => s + e.total, 0);
@@ -93,12 +94,6 @@ export async function initAnalytics(container, store) {
   }
 
   async function render() {
-    const [categories, allTxs] = await Promise.all([
-      store.getCategories(),
-      store.getTransactions({}),
-    ]);
-
-    const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
     const monthData = await Promise.all(months.map(m => store.getMonthSummary(m)));
 
     const curMonthData = monthData[monthData.length - 1];

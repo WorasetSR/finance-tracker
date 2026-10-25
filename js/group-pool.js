@@ -288,6 +288,15 @@ export async function runPoolCycle({
 
   const createdTxs = [];
 
+  let billCatId = 'cat_other_exp';
+  if (store) {
+    try {
+      const cats = await store.getCategories('expense');
+      const matched = cats.find(c => /บิล|bill|สมาชิก|ค่าใช้จ่าย/i.test(c.name)) || cats[0];
+      if (matched) billCatId = matched.id;
+    } catch {}
+  }
+
   // 1. ส่วนของเรา: นับเป็นรายจ่ายส่วนตัว (Personal Expense) เพื่อสะท้อนค่าใช้จ่ายจริงใน Dashboard
   if (selfShareMinor > 0) {
     const selfTx = makeTransaction({
@@ -295,7 +304,7 @@ export async function runPoolCycle({
       amountMinor: selfShareMinor,
       date,
       accountId: pool.accountId,
-      categoryId: 'cat_bills',
+      categoryId: billCatId,
       note: `[ชำระบิลตี้ - ส่วนของเรา] ${pool.name} ประจำรอบเดือน ${monthStr}`,
       isPoolSelfShare: true,
       poolId: pool.id,
@@ -311,7 +320,7 @@ export async function runPoolCycle({
       amountMinor: friendsShareMinor,
       date,
       accountId: pool.accountId,
-      categoryId: 'cat_bills',
+      categoryId: billCatId,
       note: `[ชำระบิลตี้ - ส่วนของสมาชิก] ${pool.name} ประจำรอบเดือน ${monthStr}`,
       isPoolExpense: true,
       poolId: pool.id,
@@ -325,7 +334,7 @@ export async function runPoolCycle({
       amountMinor: 0,
       date,
       accountId: pool.accountId,
-      categoryId: 'cat_bills',
+      categoryId: billCatId,
       note: `[ชำระบิลตี้] ${pool.name} ประจำรอบเดือน ${monthStr}`,
       isPoolExpense: true,
       poolId: pool.id,

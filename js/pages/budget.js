@@ -5,6 +5,7 @@
 
 import { formatTHB, formatMonth } from '../format.js';
 import { currentMonth } from '../schema.js';
+import { syncBudget } from '../supabase-client.js';
 import { getSubscriptions, getUpcomingBills, paySubscription } from '../subscriptions.js';
 import {
   getGroupPools,
@@ -282,7 +283,10 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
       for (const lb of lastBudgets) {
         if (existingCatIds.has(lb.categoryId)) continue;
         const { makeBudget } = await import('../schema.js');
-        await store.put('budgets', makeBudget({ month, categoryId: lb.categoryId, limitMinor: lb.limitMinor }));
+        const bgt = makeBudget({ month, categoryId: lb.categoryId, limitMinor: lb.limitMinor });
+        await store.put('budgets', bgt);
+        await store.addToPendingQueue({ id: bgt.id, store: 'budgets', op: 'create' });
+        syncBudget(bgt).catch(console.error);
         count++;
       }
       if (count > 0) { showToast(`คัดลอก ${count} หมวดสำเร็จ`); render(); }
@@ -296,7 +300,10 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
       for (const t of templates) {
         if (existingCatIds.has(t.categoryId)) continue;
         const { makeBudget } = await import('../schema.js');
-        await store.put('budgets', makeBudget({ month, categoryId: t.categoryId, limitMinor: t.limitMinor }));
+        const bgt = makeBudget({ month, categoryId: t.categoryId, limitMinor: t.limitMinor });
+        await store.put('budgets', bgt);
+        await store.addToPendingQueue({ id: bgt.id, store: 'budgets', op: 'create' });
+        syncBudget(bgt).catch(console.error);
         count++;
       }
       if (count > 0) { showToast(`ใช้มาตรฐาน ${count} หมวดสำเร็จ`); render(); }

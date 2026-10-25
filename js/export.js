@@ -525,11 +525,16 @@ export async function exportFullJsonBackup(store) {
     subscriptions = [];
   }
 
-  let habitAssociations = {};
-  let habitBankAccs = {};
+  let groupPools = [];
   try {
-    habitAssociations = JSON.parse(localStorage.getItem('ft_habit_associations') || '{}');
-    habitBankAccs = JSON.parse(localStorage.getItem('ft_habit_bank_accs') || '{}');
+    groupPools = JSON.parse(localStorage.getItem('ft_group_pools') || '[]');
+  } catch (e) {
+    groupPools = [];
+  }
+
+  let habitMap = {};
+  try {
+    habitMap = JSON.parse(localStorage.getItem('ft_habit_map') || '{}');
   } catch (e) {}
 
   const backupData = {
@@ -543,6 +548,7 @@ export async function exportFullJsonBackup(store) {
         categories: categories.length,
         budgets: budgets.length,
         subscriptions: subscriptions.length,
+        groupPools: groupPools.length,
       },
     },
     accounts,
@@ -550,10 +556,8 @@ export async function exportFullJsonBackup(store) {
     budgets,
     transactions,
     subscriptions,
-    habitEngine: {
-      associations: habitAssociations,
-      bankAccounts: habitBankAccs,
-    },
+    groupPools,
+    habitEngine: habitMap,
   };
 
   const jsonStr = JSON.stringify(backupData, null, 2);
@@ -632,8 +636,16 @@ export async function importFullJsonBackup(jsonString, store) {
     subCount = data.subscriptions.length;
   }
 
+  let poolCount = 0;
+  if (Array.isArray(data.groupPools)) {
+    localStorage.setItem('ft_group_pools', JSON.stringify(data.groupPools));
+    poolCount = data.groupPools.length;
+  }
+
   if (data.habitEngine) {
-    if (data.habitEngine.associations) {
+    if (data.habitEngine.memos || data.habitEngine.payees || data.habitEngine.banks) {
+      localStorage.setItem('ft_habit_map', JSON.stringify(data.habitEngine));
+    } else if (data.habitEngine.associations) {
       localStorage.setItem('ft_habit_associations', JSON.stringify(data.habitEngine.associations));
     }
     if (data.habitEngine.bankAccounts) {
@@ -648,6 +660,7 @@ export async function importFullJsonBackup(jsonString, store) {
     catCount,
     budgetCount,
     subCount,
+    poolCount,
   };
 }
 

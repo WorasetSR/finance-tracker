@@ -136,12 +136,21 @@ export async function paySubscription(subId, store, payAccountId = null) {
   const accountId = payAccountId || sub.accountId;
   const curMonthStr = currentMonth();
 
+  let categoryId = sub.categoryId;
+  if (!categoryId && store) {
+    try {
+      const cats = await store.getCategories('expense');
+      const matched = cats.find(c => /บิล|bill|สมาชิก|ค่าใช้จ่าย/i.test(c.name)) || cats[0];
+      if (matched) categoryId = matched.id;
+    } catch {}
+  }
+
   const tx = makeTransaction({
     type: 'expense',
     amountMinor: sub.amountMinor,
     date: todayStr(),
     accountId,
-    categoryId: sub.categoryId || 'cat_bills',
+    categoryId: categoryId || 'cat_other_exp',
     note: `[บิลประจำ] ${sub.name}`,
   });
 

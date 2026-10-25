@@ -137,7 +137,9 @@ export function toTxRow(t) {
   let note = t.note || '';
   if (t.isAdvance) {
     const tag = `[ฝากจ่าย:${t.advanceTo || 'เพื่อน'}:${t.advanceStatus || 'pending'}]`;
-    if (!note.includes('[ฝากจ่าย:')) {
+    if (/\[ฝากจ่าย:.*?\]/.test(note)) {
+      note = note.replace(/\[ฝากจ่าย:.*?\]/, tag);
+    } else {
       note = note ? `${note} ${tag}` : tag;
     }
   }
@@ -417,25 +419,29 @@ export async function pullAllFromSupabase(store) {
       }
     }
 
-    // 1. Reconcile transactions: delete local txs that are no longer in Supabase
+    // 1. Safe Reconcile transactions: Never delete active local data! Upload if missing from cloud.
     const remoteTxIds = new Set(txRows.map(r => r.id));
-    const localTxs = await store.getAll('transactions');
+    const localTxs = await store.getAllRaw('transactions');
     for (const ltx of localTxs) {
       if (!remoteTxIds.has(ltx.id)) {
-        await store.hardDelete('transactions', ltx.id);
+        if (!ltx.deletedAt) {
+          syncTransaction(ltx).catch(console.error);
+        }
       }
     }
     for (const r of txRows) {
       await store.put('transactions', fromTxRow(r));
     }
 
-    // 2. Reconcile accounts
+    // 2. Safe Reconcile accounts
     if (accRows.length > 0) {
       const remoteAccIds = new Set(accRows.map(r => r.id));
-      const localAccs = await store.getAll('accounts');
+      const localAccs = await store.getAllRaw('accounts');
       for (const lacc of localAccs) {
         if (!remoteAccIds.has(lacc.id)) {
-          await store.hardDelete('accounts', lacc.id);
+          if (!lacc.deletedAt) {
+            syncAccount(lacc).catch(console.error);
+          }
         }
       }
       for (const r of accRows) {
@@ -443,13 +449,15 @@ export async function pullAllFromSupabase(store) {
       }
     }
 
-    // 3. Reconcile categories
+    // 3. Safe Reconcile categories
     if (catRows.length > 0) {
       const remoteCatIds = new Set(catRows.map(r => r.id));
-      const localCats = await store.getAll('categories');
+      const localCats = await store.getAllRaw('categories');
       for (const lcat of localCats) {
         if (!remoteCatIds.has(lcat.id)) {
-          await store.hardDelete('categories', lcat.id);
+          if (!lcat.deletedAt) {
+            syncCategory(lcat).catch(console.error);
+          }
         }
       }
       for (const r of catRows) {
@@ -457,13 +465,15 @@ export async function pullAllFromSupabase(store) {
       }
     }
 
-    // 4. Reconcile budgets
+    // 4. Safe Reconcile budgets
     if (bgtRows.length > 0) {
       const remoteBgtIds = new Set(bgtRows.map(r => r.id));
-      const localBgts = await store.getAll('budgets');
+      const localBgts = await store.getAllRaw('budgets');
       for (const lbgt of localBgts) {
         if (!remoteBgtIds.has(lbgt.id)) {
-          await store.hardDelete('budgets', lbgt.id);
+          if (!lbgt.deletedAt) {
+            syncBudget(lbgt).catch(console.error);
+          }
         }
       }
       for (const r of bgtRows) {
