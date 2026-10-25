@@ -237,7 +237,17 @@ export class LocalStore {
    * @returns {Promise<Object[]>}
    */
   async getCategories(type) {
-    const all = await this.getAll(STORES.CATEGORIES);
+    let all = await this.getAll(STORES.CATEGORIES);
+    // Self-healing: if user categories were ever emptied, auto-restore defaults immediately!
+    const nonSystem = all.filter(c => c.id !== 'cat_advance' && c.id !== 'cat_settle');
+    if (nonSystem.length === 0) {
+      const tx = this._tx(STORES.CATEGORIES, 'readwrite');
+      for (const cat of DEFAULT_CATEGORIES) {
+        tx.objectStore(STORES.CATEGORIES).put(cat);
+      }
+      await this._txDone(tx);
+      all = await this.getAll(STORES.CATEGORIES);
+    }
     if (!type) return all;
     return all.filter(c => c.type === type || c.type === 'both');
   }
@@ -389,25 +399,28 @@ export class LocalStore {
    * Safe to call multiple times (no-op if data already exists).
    */
   async seedDefaults() {
-    // Check if accounts store already has any records (including deleted)
-    const existingAccounts = await this._req(
+    // Independent seeding: never let empty categories be skipped just because accounts exist!
+    const accCount = await this._req(
       this._tx(STORES.ACCOUNTS).objectStore(STORES.ACCOUNTS).count()
     );
-    if (existingAccounts > 0) return; // Already seeded
+    if (accCount === 0) {
+      const tx = this._tx(STORES.ACCOUNTS, 'readwrite');
+      for (const acc of DEFAULT_ACCOUNTS) {
+        tx.objectStore(STORES.ACCOUNTS).put(acc);
+      }
+      await this._txDone(tx);
+    }
 
-    const tx = this._tx(
-      [STORES.ACCOUNTS, STORES.CATEGORIES],
-      'readwrite'
+    const catCount = await this._req(
+      this._tx(STORES.CATEGORIES).objectStore(STORES.CATEGORIES).count()
     );
-
-    for (const acc of DEFAULT_ACCOUNTS) {
-      tx.objectStore(STORES.ACCOUNTS).put(acc);
+    if (catCount === 0) {
+      const tx = this._tx(STORES.CATEGORIES, 'readwrite');
+      for (const cat of DEFAULT_CATEGORIES) {
+        tx.objectStore(STORES.CATEGORIES).put(cat);
+      }
+      await this._txDone(tx);
     }
-    for (const cat of DEFAULT_CATEGORIES) {
-      tx.objectStore(STORES.CATEGORIES).put(cat);
-    }
-
-    await this._txDone(tx);
   }
 
   /**

@@ -7,6 +7,7 @@
 
 // Dynamic Model Discovery & Session Cache
 let _cachedWorkingModel = null;
+let _allDiscoveredFlashModels = null;
 
 /**
  * Dynamically discover available Flash models for the user's API key.
@@ -15,43 +16,51 @@ let _cachedWorkingModel = null;
  * @returns {Promise<string[]>} List of model resource paths (e.g. ['models/gemini-3.1-flash-lite-preview', ...])
  */
 export async function getDynamicFlashModels(apiKey) {
-  if (_cachedWorkingModel) return [_cachedWorkingModel];
-  try {
-    const cached = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ft_working_gemini_model') : null;
-    if (cached) {
-      _cachedWorkingModel = cached;
-      return [cached];
+  let cached = _cachedWorkingModel;
+  if (!cached) {
+    try {
+      cached = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ft_working_gemini_model') : null;
+      if (cached) _cachedWorkingModel = cached;
+    } catch (_) {}
+  }
+
+  if (!_allDiscoveredFlashModels) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+    if (!res.ok) {
+      if (cached) return [cached];
+      throw new Error('ไม่สามารถตรวจสอบรายการโมเดลได้ (กรุณาตรวจ API Key)');
     }
-  } catch (_) {}
+    const data = await res.json();
+    const allModels = data.models || [];
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
-  if (!res.ok) {
-    throw new Error('ไม่สามารถตรวจสอบรายการโมเดลได้ (กรุณาตรวจ API Key)');
+    const flashModels = allModels.filter(m =>
+      m.supportedGenerationMethods?.includes('generateContent') &&
+      m.name?.includes('flash') &&
+      !m.name?.includes('tts') &&
+      !m.name?.includes('image')
+    );
+
+    if (!flashModels.length) {
+      if (cached) return [cached];
+      throw new Error('ไม่พบโมเดล Flash ที่เปิดใช้งานสำหรับ API Key นี้');
+    }
+
+    // Sort: lite preview / lite first for ultra-fast response & free tier stability, deprioritize retired 2.5
+    flashModels.sort((a, b) => {
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      const aScore = (aName.includes('2.5') ? -10 : 0) + (aName.includes('lite') ? 5 : 0) + (aName.includes('preview') ? 2 : 0);
+      const bScore = (bName.includes('2.5') ? -10 : 0) + (bName.includes('lite') ? 5 : 0) + (bName.includes('preview') ? 2 : 0);
+      return bScore - aScore;
+    });
+
+    _allDiscoveredFlashModels = flashModels.map(m => m.name.startsWith('models/') ? m.name : `models/${m.name}`);
   }
-  const data = await res.json();
-  const allModels = data.models || [];
 
-  const flashModels = allModels.filter(m =>
-    m.supportedGenerationMethods?.includes('generateContent') &&
-    m.name?.includes('flash') &&
-    !m.name?.includes('tts') &&
-    !m.name?.includes('image')
-  );
-
-  if (!flashModels.length) {
-    throw new Error('ไม่พบโมเดล Flash ที่เปิดใช้งานสำหรับ API Key นี้');
+  if (cached && _allDiscoveredFlashModels.includes(cached)) {
+    return [cached, ..._allDiscoveredFlashModels.filter(m => m !== cached)];
   }
-
-  // Sort: lite preview / lite first for ultra-fast response & free tier stability, deprioritize retired 2.5
-  flashModels.sort((a, b) => {
-    const aName = a.name.toLowerCase();
-    const bName = b.name.toLowerCase();
-    const aScore = (aName.includes('2.5') ? -10 : 0) + (aName.includes('lite') ? 5 : 0) + (aName.includes('preview') ? 2 : 0);
-    const bScore = (bName.includes('2.5') ? -10 : 0) + (bName.includes('lite') ? 5 : 0) + (bName.includes('preview') ? 2 : 0);
-    return bScore - aScore;
-  });
-
-  return flashModels.map(m => m.name.startsWith('models/') ? m.name : `models/${m.name}`);
+  return _allDiscoveredFlashModels;
 }
 
 
@@ -220,7 +229,7 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(30000),
         });
 
         if (response.ok) {
@@ -254,7 +263,7 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
         if (err.message.includes('API Key')) throw err;
         lastErrorMsg = err.message;
         if (err.name === 'TimeoutError' || err.message?.includes('aborted')) {
-          lastErrorMsg = 'การเชื่อมต่อใช้เวลานานเกินไป (Timeout 20s)';
+          lastErrorMsg = 'การเชื่อมต่อใช้เวลานานเกินไป (Timeout 30s)';
         }
       }
     }
@@ -262,12 +271,14 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
     if (winningModel) break;
   }
 
-  // Clear cache if previously cached model is now failing
+  // Clear cache if previously cached model is now failing with 404 or permanently unavailable
   if (!response || !response.ok) {
-    _cachedWorkingModel = null;
-    try {
-      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('ft_working_gemini_model');
-    } catch (_) {}
+    if (response?.status === 404 || lastErrorMsg?.includes('not found') || lastErrorMsg?.includes('no longer available')) {
+      _cachedWorkingModel = null;
+      try {
+        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('ft_working_gemini_model');
+      } catch (_) {}
+    }
     throw new Error(`วิเคราะห์สลิปล้มเหลว: ${lastErrorMsg || 'ไม่สามารถเรียกใช้ Gemini Flash ได้'}`);
   }
 

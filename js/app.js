@@ -941,6 +941,9 @@ let splitItems = [];
 let allLoadedCategories = [];
 let allLoadedAccounts = [];
 let currentSlipType = 'expense';
+let _onSlipItemReady = null;
+let _slipPipelineCancelled = false;
+let _backgroundPipelineRunning = false;
 
 function revokeCurrentThumb() {
   if (currentThumbUrl) {
@@ -949,8 +952,22 @@ function revokeCurrentThumb() {
   }
 }
 
-function resetSlipModalState() {
+function cleanupSlipQueueThumbs() {
+  if (Array.isArray(slipQueue)) {
+    for (const item of slipQueue) {
+      if (item && item.thumbUrl) {
+        URL.revokeObjectURL(item.thumbUrl);
+        item.thumbUrl = null;
+      }
+    }
+  }
   revokeCurrentThumb();
+}
+
+function resetSlipModalState() {
+  _slipPipelineCancelled = true;
+  _onSlipItemReady = null;
+  cleanupSlipQueueThumbs();
   slipQueue = [];
   currentSlipIndex = 0;
   currentParsedData = null;
@@ -1261,80 +1278,159 @@ async function handleSlipFiles(files) {
     return;
   }
 
+  resetSlipModalState();
   openModal('slip-modal');
-  slipQueue = Array.from(files);
+
+  _slipPipelineCancelled = false;
+  slipQueue = Array.from(files).map((file, idx) => ({
+    file,
+    index: idx,
+    status: 'pending', // 'pending' | 'compressing' | 'parsing' | 'ready' | 'error'
+    compressedBlob: null,
+    thumbUrl: null,
+    parsed: null,
+    error: null,
+  }));
   currentSlipIndex = 0;
-  await processCurrentSlip();
+
+  // Start background parsing pipeline
+  startBackgroundSlipPipeline(apiKey);
+
+  // Display the first slip
+  await displaySlipAtCurrentIndex();
 }
 
-async function processCurrentSlip() {
+async function startBackgroundSlipPipeline(apiKey) {
+  if (_backgroundPipelineRunning) return;
+  _backgroundPipelineRunning = true;
+
+  try {
+    for (let i = 0; i < slipQueue.length; i++) {
+      if (_slipPipelineCancelled) break;
+      const item = slipQueue[i];
+      if (!item || item.status !== 'pending') continue;
+
+      // 1. Compress image
+      item.status = 'compressing';
+      try {
+        item.compressedBlob = await compressImage(item.file, 1280, 0.82);
+        if (_slipPipelineCancelled) break;
+        item.thumbUrl = URL.createObjectURL(item.compressedBlob);
+      } catch (compErr) {
+        console.warn('Compression error, fallback to raw file:', compErr);
+        item.compressedBlob = item.file;
+        item.thumbUrl = URL.createObjectURL(item.file);
+      }
+
+      // 2. Parse slip with Gemini Flash
+      item.status = 'parsing';
+      try {
+        const parsed = await parseSlipImage(item.compressedBlob, apiKey);
+        if (_slipPipelineCancelled) break;
+        item.parsed = parsed;
+        item.status = 'ready';
+      } catch (parseErr) {
+        console.error(`Slip #${i + 1} parse error:`, parseErr);
+        if (_slipPipelineCancelled) break;
+        item.error = parseErr.message;
+        item.parsed = {
+          amountMinor: 0,
+          date: todayStr(),
+          time: '',
+          bank: '',
+          memo: '',
+          bankCategoryTag: '',
+          payeeAccount: '',
+        };
+        item.status = 'error';
+      }
+
+      // If foreground UI is waiting for this item, notify it!
+      if (typeof _onSlipItemReady === 'function') {
+        _onSlipItemReady(item);
+      }
+
+      // Small pause between background slips to avoid network spikes
+      if (i < slipQueue.length - 1 && !_slipPipelineCancelled) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+  } finally {
+    _backgroundPipelineRunning = false;
+  }
+}
+
+async function displaySlipAtCurrentIndex() {
   if (isProcessingSlip) return;
   isProcessingSlip = true;
 
-  if (currentSlipIndex >= slipQueue.length) {
-    revokeCurrentThumb();
-    closeModal('slip-modal');
-    showToast(`สแกนและบันทึกสลิปเรียบร้อย (${slipQueue.length} ใบ)`);
-    isProcessingSlip = false;
-    refreshPage();
-    return;
-  }
-
-  const dropSec = document.getElementById('slip-drop-section');
-  const loadSec = document.getElementById('slip-loading-section');
-  const prevSec = document.getElementById('slip-preview-section');
-  const badge   = document.getElementById('slip-queue-badge');
-  const loadTxt = document.getElementById('slip-loading-text');
-  const saveBtn = document.getElementById('btn-slip-save');
-  const skipBtn = document.getElementById('btn-slip-skip');
-
-  if (saveBtn) saveBtn.disabled = true;
-  if (skipBtn) skipBtn.disabled = true;
-
-  dropSec?.classList.add('hidden');
-  prevSec?.classList.add('hidden');
-  loadSec?.classList.remove('hidden');
-
-  if (badge) {
-    badge.textContent = `สลิป ${currentSlipIndex + 1}/${slipQueue.length}`;
-    badge.classList.remove('hidden');
-  }
-  if (loadTxt) {
-    loadTxt.textContent = `กำลังวิเคราะห์สลิปใบที่ ${currentSlipIndex + 1} จาก ${slipQueue.length}...`;
-  }
-
-  const rawFile = slipQueue[currentSlipIndex];
-
   try {
-    const compressedBlob = await compressImage(rawFile, 1280, 0.82);
-
-    revokeCurrentThumb();
-    const thumbImg = document.getElementById('slip-thumb-img');
-    if (thumbImg) {
-      currentThumbUrl = URL.createObjectURL(compressedBlob);
-      thumbImg.src = currentThumbUrl;
+    if (currentSlipIndex >= slipQueue.length) {
+      cleanupSlipQueueThumbs();
+      closeModal('slip-modal');
+      showToast(`สแกนและบันทึกสลิปเรียบร้อย (${slipQueue.length} ใบ)`);
+      refreshPage();
+      return;
     }
 
-    const apiKey = getGeminiKey();
-    const parsed = await parseSlipImage(compressedBlob, apiKey);
-    currentParsedData = parsed;
-    await populateSlipPreview(parsed);
-  } catch (err) {
-    console.error('Slip parse error:', err);
-    showToast(`สลิปใบที่ ${currentSlipIndex + 1}: ${err.message}`, 'error');
-    currentParsedData = {
-      amountMinor: 0,
-      date: todayStr(),
-      time: '',
-      bank: '',
-      memo: '',
-      bankCategoryTag: '',
-      payeeAccount: '',
-    };
-    await populateSlipPreview(currentParsedData);
-  } finally {
+    const dropSec = document.getElementById('slip-drop-section');
+    const loadSec = document.getElementById('slip-loading-section');
+    const prevSec = document.getElementById('slip-preview-section');
+    const badge   = document.getElementById('slip-queue-badge');
+    const loadTxt = document.getElementById('slip-loading-text');
+    const saveBtn = document.getElementById('btn-slip-save');
+    const skipBtn = document.getElementById('btn-slip-skip');
+
+    if (badge) {
+      badge.textContent = `สลิป ${currentSlipIndex + 1}/${slipQueue.length}`;
+      badge.classList.remove('hidden');
+    }
+
+    let item = slipQueue[currentSlipIndex];
+    if (!item) return;
+
+    // If item is not yet ready, show loading section and wait for it
+    if (item.status !== 'ready' && item.status !== 'error') {
+      if (saveBtn) saveBtn.disabled = true;
+      if (skipBtn) skipBtn.disabled = true;
+
+      dropSec?.classList.add('hidden');
+      prevSec?.classList.add('hidden');
+      loadSec?.classList.remove('hidden');
+
+      if (loadTxt) {
+        loadTxt.textContent = `กำลังวิเคราะห์สลิปใบที่ ${currentSlipIndex + 1} จาก ${slipQueue.length}...`;
+      }
+
+      await new Promise(resolve => {
+        _onSlipItemReady = (readyItem) => {
+          if (readyItem && readyItem.index === currentSlipIndex) {
+            _onSlipItemReady = null;
+            resolve();
+          }
+        };
+      });
+
+      if (_slipPipelineCancelled) return;
+      item = slipQueue[currentSlipIndex];
+    }
+
+    if (item.status === 'error' && item.error) {
+      showToast(`สลิปใบที่ ${currentSlipIndex + 1}: ${item.error}`, 'error');
+    }
+
+    const thumbImg = document.getElementById('slip-thumb-img');
+    if (thumbImg && item.thumbUrl) {
+      thumbImg.src = item.thumbUrl;
+      currentThumbUrl = item.thumbUrl;
+    }
+
+    currentParsedData = item.parsed;
+    await populateSlipPreview(item.parsed);
+
     if (saveBtn && (!isSplitMode || splitItems.length === 0)) saveBtn.disabled = false;
     if (skipBtn) skipBtn.disabled = false;
+  } finally {
     isProcessingSlip = false;
   }
 }
@@ -1520,7 +1616,7 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
   showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว`);
 
   currentSlipIndex++;
-  await processCurrentSlip();
+  await displaySlipAtCurrentIndex();
 });
 
 document.getElementById('btn-slip-skip')?.addEventListener('click', async () => {
@@ -1532,7 +1628,7 @@ document.getElementById('btn-slip-skip')?.addEventListener('click', async () => 
 
   showToast(`ข้ามสลิปใบที่ ${currentSlipIndex + 1}`);
   currentSlipIndex++;
-  await processCurrentSlip();
+  await displaySlipAtCurrentIndex();
 });
 
 document.getElementById('btn-browse-slips')?.addEventListener('click', (e) => {
@@ -2704,7 +2800,9 @@ function closeModal(id) {
   document.getElementById(id)?.classList.add('hidden');
   document.body.style.overflow = '';
   if (id === 'slip-modal') {
-    revokeCurrentThumb();
+    _slipPipelineCancelled = true;
+    _onSlipItemReady = null;
+    cleanupSlipQueueThumbs();
     isProcessingSlip = false;
     document.getElementById('slip-lightbox')?.classList.add('hidden');
   }
@@ -2715,7 +2813,9 @@ document.addEventListener('click', (e) => {
     e.target.classList.add('hidden');
     document.body.style.overflow = '';
     if (e.target.id === 'slip-modal') {
-      revokeCurrentThumb();
+      _slipPipelineCancelled = true;
+      _onSlipItemReady = null;
+      cleanupSlipQueueThumbs();
       isProcessingSlip = false;
       document.getElementById('slip-lightbox')?.classList.add('hidden');
     }
@@ -2737,7 +2837,9 @@ document.addEventListener('keydown', (e) => {
     document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => {
       m.classList.add('hidden');
       if (m.id === 'slip-modal') {
-        revokeCurrentThumb();
+        _slipPipelineCancelled = true;
+        _onSlipItemReady = null;
+        cleanupSlipQueueThumbs();
         isProcessingSlip = false;
       }
     });
