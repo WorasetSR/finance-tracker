@@ -3,7 +3,7 @@
 //  Finance Tracker v4.0 (Zero-Emoji SVG Icons)
 // ─────────────────────────────────────────────────────────────
 
-import { formatTHB, formatDate, formatDateRelative, formatMonth } from '../format.js';
+import { formatTHB, formatDate, formatDateRelative, formatMonth, cleanNoteDisplay } from '../format.js';
 import { currentMonth, todayStr } from '../schema.js';
 import { exportTransactions } from '../export.js';
 import { renderIcon } from '../icons.js';
@@ -84,7 +84,10 @@ export async function initTransactions(container, store, { openTxModal, showToas
           <button class="icon-btn" id="prev-month" title="เดือนก่อน">
             ${renderIcon('chevron-left', 16)}
           </button>
-          <h1 class="page-title" style="min-width:120px;text-align:center">${formatMonth(month)}</h1>
+          <label class="month-picker-label" title="แตะเพื่อเลือกเดือนและปี" style="cursor:pointer;position:relative">
+            <h1 class="page-title month-jump-title" style="min-width:120px;text-align:center">${formatMonth(month)} <span style="font-size:11px;opacity:0.5">▾</span></h1>
+            <input type="month" id="tx-month-input" value="${month}" class="sr-only-select" />
+          </label>
           <button class="icon-btn" id="next-month" title="เดือนถัดไป">
             ${renderIcon('chevron-right', 16)}
           </button>
@@ -172,10 +175,14 @@ export async function initTransactions(container, store, { openTxModal, showToas
       }
     }
 
+    let searchDebounce = null;
     const searchInp = document.getElementById('tx-search-input');
     searchInp?.addEventListener('input', (e) => {
       searchQuery = e.target.value;
-      render(true);
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        render(true);
+      }, 140);
     });
 
     document.getElementById('btn-clear-search')?.addEventListener('click', () => {
@@ -203,6 +210,17 @@ export async function initTransactions(container, store, { openTxModal, showToas
 
     document.getElementById('prev-month')?.addEventListener('click', () => { month = offsetMonth(month, -1); render(); });
     document.getElementById('next-month')?.addEventListener('click', () => { month = offsetMonth(month, 1); render(); });
+
+    const txMonthInp = document.getElementById('tx-month-input');
+    txMonthInp?.addEventListener('change', (e) => {
+      if (e.target.value) {
+        month = e.target.value;
+        render();
+      }
+    });
+    container.querySelector('.month-picker-label')?.addEventListener('click', () => {
+      try { txMonthInp?.showPicker?.(); } catch { txMonthInp?.click(); }
+    });
 
     document.getElementById('btn-add-tx-page')?.addEventListener('click', () => openTxModal());
     document.getElementById('btn-add-empty')?.addEventListener('click', () => openTxModal());
@@ -328,10 +346,11 @@ function renderCalendarView(month, txs, selectedDate, catMap, accMap) {
     cellsHtml += `
       <div class="cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" data-date="${dateStr}">
         <span class="cal-day-num">${d}</span>
-        <div class="cal-badges">
-          ${stat && stat.income > 0 ? `<span class="cal-badge income">+${formatTHB(stat.income, { compact: true })}</span>` : ''}
-          ${stat && stat.expense > 0 ? `<span class="cal-badge expense">-${formatTHB(stat.expense, { compact: true })}</span>` : ''}
+        <div class="cal-dots">
+          ${stat && stat.income > 0 ? `<span class="cal-dot income" title="รายรับ"></span>` : ''}
+          ${stat && stat.expense > 0 ? `<span class="cal-dot expense" title="รายจ่าย"></span>` : ''}
         </div>
+        ${stat && stat.expense > 0 ? `<span class="cal-mini-net mono">-${formatTHB(stat.expense, { compact: true }).replace('฿','')}</span>` : (stat && stat.income > 0 ? `<span class="cal-mini-net income mono">+${formatTHB(stat.income, { compact: true }).replace('฿','')}</span>` : '')}
       </div>
     `;
   }
@@ -399,7 +418,7 @@ function renderTxRow(tx, catMap, accMap) {
           ${tx.isPoolSelfShare || (tx.note || '').includes('[ชำระบิลตี้ - ส่วนของเรา]') ? `<span class="badge-advance">ตี้: ส่วนของเรา</span>` : ''}
         </span>
         <span class="tx-meta">
-          ${acc?.name || ''}${isTransfer && toAcc ? ' → ' + toAcc.name : ''}${tx.note ? ' · ' + tx.note : ''}
+          ${acc?.name || ''}${isTransfer && toAcc ? ' → ' + toAcc.name : ''}${cleanNoteDisplay(tx.note) ? ' · ' + cleanNoteDisplay(tx.note) : ''}
         </span>
       </div>
       <div class="tx-right">

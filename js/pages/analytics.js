@@ -100,10 +100,26 @@ export async function initAnalytics(container, store) {
     const prevMonthData = monthData[monthData.length - 2] || { income: 0, expense: 0, net: 0 };
 
     const expDiff = curMonthData.expense - prevMonthData.expense;
-    const expPct = prevMonthData.expense > 0 ? Math.round((expDiff / prevMonthData.expense) * 100) : 0;
+    let expPillText = '';
+    let expPillClass = expDiff <= 0 ? 'better' : 'worse';
+    if (prevMonthData.expense === 0) {
+      expPillText = curMonthData.expense > 0 ? 'เดือนเริ่มต้น' : 'ไม่มีรายจ่าย';
+      expPillClass = 'neutral';
+    } else {
+      const expPct = Math.round((expDiff / prevMonthData.expense) * 100);
+      expPillText = `${expDiff <= 0 ? '↓' : '↑'} ${Math.abs(expPct)}% ${expDiff <= 0 ? 'ลดลง' : 'เพิ่มขึ้น'}`;
+    }
 
     const incDiff = curMonthData.income - prevMonthData.income;
-    const incPct = prevMonthData.income > 0 ? Math.round((incDiff / prevMonthData.income) * 100) : 0;
+    let incPillText = '';
+    let incPillClass = incDiff >= 0 ? 'better' : 'worse';
+    if (prevMonthData.income === 0) {
+      incPillText = curMonthData.income > 0 ? 'เดือนเริ่มต้น' : 'ไม่มีรายรับ';
+      incPillClass = 'neutral';
+    } else {
+      const incPct = Math.round((incDiff / prevMonthData.income) * 100);
+      incPillText = `${incDiff >= 0 ? '↑' : '↓'} ${Math.abs(incPct)}% ${incDiff >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'}`;
+    }
 
     const savingRates = monthData.map(d => d.income > 0 ? Math.round((d.net / d.income) * 100) : 0);
     const curSavingRate = savingRates[savingRates.length - 1];
@@ -143,27 +159,26 @@ export async function initAnalytics(container, store) {
           <div class="mom-card">
             <div class="mom-header">
               <span class="mom-label">รายจ่ายเดือนนี้ (${formatMonthShort(endMonth)})</span>
-              <span class="mom-pill ${expDiff <= 0 ? 'better' : 'worse'}">
-                ${expDiff <= 0 ? '↓' : '↑'} ${Math.abs(expPct)}% ${expDiff <= 0 ? 'ลดลง' : 'เพิ่มขึ้น'}
+              <span class="mom-pill ${expPillClass}">
+                ${expPillText}
               </span>
             </div>
             <div class="mom-value expense">${formatTHB(curMonthData.expense)}</div>
             <div class="stat-sub">
-              ${expDiff <= 0 ? 'ประหยัดกว่าเดือนก่อน ' : 'ใช้มากกว่าเดือนก่อน '}
-              <span class="mono">${formatTHB(Math.abs(expDiff))}</span>
+              ${prevMonthData.expense === 0 ? 'รายจ่ายทั้งหมดในเดือนนี้' : (expDiff <= 0 ? 'ประหยัดกว่าเดือนก่อน ' : 'ใช้มากกว่าเดือนก่อน ') + formatTHB(Math.abs(expDiff))}
             </div>
           </div>
 
           <div class="mom-card">
             <div class="mom-header">
               <span class="mom-label">รายรับเดือนนี้</span>
-              <span class="mom-pill ${incDiff >= 0 ? 'better' : 'neutral'}">
-                ${incDiff >= 0 ? '↑' : '↓'} ${Math.abs(incPct)}%
+              <span class="mom-pill ${incPillClass}">
+                ${incPillText}
               </span>
             </div>
             <div class="mom-value income">${formatTHB(curMonthData.income)}</div>
             <div class="stat-sub">
-              เทียบเดือนก่อน ${incDiff >= 0 ? '+' : '-'}<span class="mono">${formatTHB(Math.abs(incDiff))}</span>
+              ${prevMonthData.income === 0 ? 'รายรับทั้งหมดในเดือนนี้' : (incDiff >= 0 ? 'มากกว่าเดือนก่อน +' : 'ลดลงจากเดือนก่อน -') + formatTHB(Math.abs(incDiff))}
             </div>
           </div>
 

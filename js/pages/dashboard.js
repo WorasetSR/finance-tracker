@@ -3,7 +3,7 @@
 //  Finance Tracker v4.0 (Zero-Emoji SVG Icons)
 // ─────────────────────────────────────────────────────────────
 
-import { formatTHB, formatMonth, formatDateRelative } from '../format.js';
+import { formatTHB, formatMonth, formatDateRelative, cleanNoteDisplay } from '../format.js';
 import { currentMonth, makeTransaction, todayStr } from '../schema.js';
 import { syncTransaction } from '../supabase-client.js';
 import { getUpcomingBills, paySubscription } from '../subscriptions.js';
@@ -97,7 +97,10 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
           <button class="icon-btn" id="prev-month" title="เดือนก่อน" aria-label="เดือนก่อน">
             ${renderIcon('chevron-left', 16)}
           </button>
-          <h1 class="page-title" style="min-width:120px;text-align:center">${formatMonth(month)}</h1>
+          <label class="month-picker-label" title="แตะเพื่อเลือกเดือนและปี" style="cursor:pointer;position:relative">
+            <h1 class="page-title month-jump-title" style="min-width:120px;text-align:center">${formatMonth(month)} <span style="font-size:11px;opacity:0.5">▾</span></h1>
+            <input type="month" id="dash-month-input" value="${month}" class="sr-only-select" />
+          </label>
           <button class="icon-btn" id="next-month" title="เดือนถัดไป" aria-label="เดือนถัดไป">
             ${renderIcon('chevron-right', 16)}
           </button>
@@ -184,7 +187,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
                         <span class="badge-advance">รอคืน</span>
                         <strong>${adv.advanceTo || 'เพื่อน'}</strong>
                       </span>
-                      <span class="receivable-meta">${formatDateRelative(adv.date)}${adv.note ? ' · ' + adv.note : ''}</span>
+                      <span class="receivable-meta">${formatDateRelative(adv.date)}${cleanNoteDisplay(adv.note) ? ' · ' + cleanNoteDisplay(adv.note) : ''}</span>
                     </div>
                     <div class="receivable-right">
                       <span class="mono" style="font-weight:700;color:var(--warning)">${formatTHB(adv.amountMinor)}</span>
@@ -264,7 +267,7 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
                           ${tx.isAdvance ? `<span class="badge-advance ${tx.advanceStatus === 'settled' ? 'settled' : ''}">${tx.advanceStatus === 'settled' ? 'คืนแล้ว: ' : 'รอคืน: '}${tx.advanceTo || 'เพื่อน'}</span>` : ''}
                           ${tx.isAdvanceSettlement ? `<span class="badge-advance settled">รับเงินคืน</span>` : ''}
                         </span>
-                        <span class="tx-meta">${formatDateRelative(tx.date)}${tx.note ? ' · ' + tx.note : ''}</span>
+                        <span class="tx-meta">${formatDateRelative(tx.date)}${cleanNoteDisplay(tx.note) ? ' · ' + cleanNoteDisplay(tx.note) : ''}</span>
                       </div>
                       <span class="tx-amount mono ${tx.type === 'income' ? 'income' : tx.type === 'expense' ? 'expense' : ''}">
                         ${tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}${formatTHB(tx.amountMinor)}
@@ -311,6 +314,16 @@ export async function initDashboard(container, store, { openTxModal, showToast, 
     document.getElementById('next-month')?.addEventListener('click', () => {
       month = offsetMonth(month, 1);
       render();
+    });
+    const dashMonthInp = document.getElementById('dash-month-input');
+    dashMonthInp?.addEventListener('change', (e) => {
+      if (e.target.value) {
+        month = e.target.value;
+        render();
+      }
+    });
+    document.querySelector('.month-picker-label')?.addEventListener('click', () => {
+      try { dashMonthInp?.showPicker?.(); } catch { dashMonthInp?.click(); }
     });
 
     // Collapsible banners

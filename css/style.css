@@ -63,8 +63,8 @@
   --text:           #FAFAFA;
   --text-secondary: #A1A1AA;
   --text-muted:     #71717A;
-  --border:         #27272A;
-  --border-light:   #1E1E22;
+  --border:         #2E2E33;
+  --border-light:   #202025;
   --income:         #10B981;
   --income-bg:      rgba(16, 185, 129, 0.12);
   --expense:        #F43F5E;
@@ -533,6 +533,24 @@ img  { display: block; max-width: 100%; }
   }
 
   #btn-add-tx-page { display: none; }
+
+  /* Suppress redundant page-title on mobile because topbar already shows it */
+  .page-header > h1.page-title,
+  .page-header > div > h1.page-title {
+    display: none;
+  }
+  .page-header {
+    margin-bottom: 12px;
+  }
+  .account-manage-row .drag-handle {
+    display: none !important;
+  }
+  .account-manage-row .account-name {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* ── PAGE HEADER & ACTIONS (Zero Overflow on Mobile) ─────── */
@@ -970,6 +988,12 @@ img  { display: block; max-width: 100%; }
 /* ── COLOR & FONT UTILITIES ──────────────────────────────── */
 .income  { color: var(--income) !important; }
 .expense { color: var(--expense) !important; }
+
+.mono, .mono-input, .account-balance, .tx-amount, .hero-net-value, .hero-metric-val, .mom-value, .acc-mini-bal, .legend-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
 .warning { color: var(--warning) !important; }
 .mono, .stat-value, .mom-value, .tx-amount, .data-table .num, .cat-bar-val, .hero-net-value, .hero-metric-val {
   font-family: var(--font-mono);
@@ -1309,6 +1333,37 @@ img  { display: block; max-width: 100%; }
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+}
+
+.cal-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin-top: 2px;
+}
+.cal-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cal-dot.income { background: var(--income); }
+.cal-dot.expense { background: var(--expense); }
+
+.cal-mini-net {
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1;
+  color: var(--expense);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+}
+.cal-mini-net.income {
+  color: var(--income);
 }
 
 .cal-badge {
@@ -2227,9 +2282,10 @@ button:disabled {
   border: 1px solid var(--border);
   width: 100%;
   max-width: 480px;
-  max-height: 92vh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   animation: modal-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: var(--shadow-lg);
 }
@@ -2248,13 +2304,12 @@ button:disabled {
 .modal-xs { max-width: 340px; }
 
 .modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-light);
-  position: sticky;
-  top: 0;
   background: var(--bg-card);
   z-index: 10;
 }
@@ -2266,8 +2321,8 @@ button:disabled {
 }
 
 .modal-close {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2277,17 +2332,27 @@ button:disabled {
 .modal-close:hover { background: var(--border-light); color: var(--text); }
 
 .modal-body {
-  padding: 16px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 18px 8px;
 }
 
 .modal-actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-light);
+  margin-left: -18px;
+  margin-right: -18px;
+  margin-bottom: -8px;
+  padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  z-index: 10;
 }
 
 .modal-actions-right {
@@ -2689,30 +2754,54 @@ button:disabled {
   background: var(--bg-card);
   border-top: 1px solid var(--border);
   border-radius: 20px 20px 0 0;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   animation: modal-slide-up 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.calc-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
 .calc-label {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-  text-align: center;
-  margin-bottom: 8px;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calc-sheet-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.calc-sheet-close:hover {
+  background: var(--border-light);
+  color: var(--text);
 }
 
 .calc-display {
   font-size: 32px;
   font-weight: 700;
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
   text-align: right;
-  padding: 10px 14px;
+  padding: 8px 14px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   margin-bottom: 10px;
-  min-height: 56px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -2726,16 +2815,33 @@ button:disabled {
 }
 
 .calc-btn {
-  height: 54px;
+  height: 50px;
   border-radius: 10px;
   font-size: 20px;
   font-weight: 600;
   background: var(--bg);
   border: 1px solid var(--border-light);
   color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease;
 }
-.calc-btn.calc-op { background: var(--border-light); font-weight: 700; }
-.calc-btn.calc-ok { background: var(--primary); color: #fff; }
+.calc-btn:active {
+  transform: scale(0.96);
+  background: var(--border-light);
+}
+.calc-btn.calc-action { background: var(--border-light); color: var(--text-secondary); font-weight: 700; }
+.calc-btn.calc-op { background: var(--border-light); font-weight: 700; color: var(--primary); }
+.calc-btn.calc-zero { grid-column: span 2; }
+.calc-btn.calc-ok {
+  grid-row: span 2;
+  height: auto;
+  min-height: 108px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 24px;
+}
 [data-theme="dark"] .calc-btn.calc-ok { background: #FAFAFA; color: #09090B; }
 
 /* ── TOAST NOTIFICATIONS ─────────────────────────────────── */

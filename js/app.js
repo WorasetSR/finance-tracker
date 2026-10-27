@@ -506,8 +506,8 @@ async function openTxModal(txId = null) {
   setTxSplitMode(false);
   txSplitItems = [];
 
-  const expCats = categories.filter(c => c.type === 'expense' || c.type === 'both');
-  const incCats = categories.filter(c => c.type === 'income'  || c.type === 'both');
+  const expCats = categories.filter(c => (c.type === 'expense' || c.type === 'both') && c.id !== 'cat_advance' && c.name !== 'ออกให้คนอื่นก่อน');
+  const incCats = categories.filter(c => (c.type === 'income'  || c.type === 'both') && c.id !== 'cat_settle'  && c.name !== 'รับเงินคืน');
 
   if (txId) {
     const tx = await store.get('transactions', txId);
@@ -600,7 +600,11 @@ async function setTxType(type, preferredCatId = null) {
 
   if (!isTransfer) {
     const cats = await store.getCategories();
-    const filtered = cats.filter(c => c.type === type || c.type === 'both');
+    const filtered = cats.filter(c => {
+      if (c.id === 'cat_advance' || c.name === 'ออกให้คนอื่นก่อน') return false;
+      if (c.id === 'cat_settle'  || c.name === 'รับเงินคืน') return false;
+      return c.type === type || c.type === 'both';
+    });
     const curSel = preferredCatId || document.getElementById('tx-category')?.value;
     renderChipSelector('tx-category-chips', 'tx-category', filtered, curSel, 'box');
   }
@@ -1065,7 +1069,11 @@ function setSlipType(type, preferredCatId = null) {
   if (isTransfer) {
     setSplitMode(false);
   } else {
-    const filtered = allLoadedCategories.filter(c => c.type === currentSlipType || c.type === 'both');
+    const filtered = allLoadedCategories.filter(c => {
+      if (c.id === 'cat_advance' || c.name === 'ออกให้คนอื่นก่อน') return false;
+      if (c.id === 'cat_settle'  || c.name === 'รับเงินคืน') return false;
+      return c.type === currentSlipType || c.type === 'both';
+    });
     if (filtered.length) {
       const prevVal = preferredCatId || document.getElementById('slip-category')?.value;
       renderChipSelector('slip-category-chips', 'slip-category', filtered, prevVal, 'box');
@@ -3027,7 +3035,10 @@ function handleCalcInputKey(key) {
   const display = document.getElementById('calc-display');
   const ops = ['+', '-', '×', 'x', '*', '÷', '/'];
 
-  if (key === '⌫' || key === 'Backspace') {
+  if (key === 'C' || key === 'c') {
+    _calcExpr = '0';
+    _calcFresh = true;
+  } else if (key === '⌫' || key === 'Backspace') {
     _calcExpr = _calcExpr.slice(0, -1);
     _calcFresh = false;
   } else if (key === '✓' || key === 'Enter') {
@@ -3091,7 +3102,10 @@ function handleCalcInputKey(key) {
 }
 
 document.getElementById('calc-overlay')?.addEventListener('pointerdown', e => {
-  if (e.target === document.getElementById('calc-overlay')) { hideCalc(); return; }
+  if (e.target === document.getElementById('calc-overlay') || e.target.closest('#btn-calc-close')) {
+    hideCalc();
+    return;
+  }
 
   const btn = e.target.closest('[data-calc]');
   if (!btn) return;
@@ -3108,6 +3122,9 @@ window.addEventListener('keydown', e => {
   if (e.key >= '0' && e.key <= '9') {
     e.preventDefault();
     handleCalcInputKey(e.key);
+  } else if (e.key === 'c' || e.key === 'C') {
+    e.preventDefault();
+    handleCalcInputKey('C');
   } else if (e.key === '.') {
     e.preventDefault();
     handleCalcInputKey('.');

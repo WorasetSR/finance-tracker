@@ -175,3 +175,13 @@ export function parseAmount(str) {
   // Math.round avoids floating-point drift (e.g. 12.5 * 100 = 1249.9999...)
   return Math.round(n * 100);
 }
+
+/**
+ * Clean internal envelope tags (e.g. [ฝากจ่าย:บอย:pending] or [ชำระบิลตี้:...]) from note text for display.
+ * @param {string} note
+ * @returns {string}
+ */
+export function cleanNoteDisplay(note) {
+  if (!note) return '';
+  return String(note).replace(/\[[^\]]+\]/g, '').trim();
+}

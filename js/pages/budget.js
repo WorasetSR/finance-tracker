@@ -88,7 +88,10 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
           <button class="icon-btn" id="prev-month" title="เดือนก่อน">
             ${renderIcon('chevron-left', 16)}
           </button>
-          <h1 class="page-title" style="min-width:120px;text-align:center">${formatMonth(month)}</h1>
+          <label class="month-picker-label" title="แตะเพื่อเลือกเดือนและปี" style="cursor:pointer;position:relative">
+            <h1 class="page-title month-jump-title" style="min-width:120px;text-align:center">${formatMonth(month)} <span style="font-size:11px;opacity:0.5">▾</span></h1>
+            <input type="month" id="budget-month-input" value="${month}" class="sr-only-select" />
+          </label>
           <button class="icon-btn" id="next-month" title="เดือนถัดไป">
             ${renderIcon('chevron-right', 16)}
           </button>
@@ -105,19 +108,19 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
               ${renderIcon('users', 14)} ตี้หารบิล
             </button>
           </div>
-          ${activeTab === 'budget' ? `
+          ${activeTab === 'budget' && allItems.length > 0 ? `
             <button class="btn-primary btn-sm" id="btn-add-budget">
               ${renderIcon('plus', 14)} ตั้งงบ
             </button>
-          ` : activeTab === 'subscriptions' ? `
+          ` : activeTab === 'subscriptions' && allSubs.length > 0 ? `
             <button class="btn-primary btn-sm" id="btn-add-sub">
               ${renderIcon('plus', 14)} เพิ่มบิล
             </button>
-          ` : `
+          ` : activeTab === 'pools' && getGroupPools().length > 0 ? `
             <button class="btn-primary btn-sm" id="btn-add-pool">
               ${renderIcon('plus', 14)} เพิ่มตี้
             </button>
-          `}
+          ` : ''}
         </div>
       </div>
 
@@ -132,6 +135,17 @@ export async function initBudget(container, store, { showToast, showConfirm, tab
 
     document.getElementById('prev-month')?.addEventListener('click', () => { month = offsetMonth(month, -1); render(); });
     document.getElementById('next-month')?.addEventListener('click', () => { month = offsetMonth(month, 1); render(); });
+
+    const bgMonthInp = document.getElementById('budget-month-input');
+    bgMonthInp?.addEventListener('change', (e) => {
+      if (e.target.value) {
+        month = e.target.value;
+        render();
+      }
+    });
+    container.querySelector('.month-picker-label')?.addEventListener('click', () => {
+      try { bgMonthInp?.showPicker?.(); } catch { bgMonthInp?.click(); }
+    });
 
     document.querySelectorAll('.view-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {

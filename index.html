@@ -947,28 +947,38 @@
 <!-- ── CALCULATOR ────────────────────────────────────────── -->
 <div id="calc-overlay" class="calc-overlay hidden">
   <div class="calc-sheet">
-    <div class="calc-label" id="calc-label">จำนวน</div>
+    <div class="calc-sheet-header">
+      <span class="calc-label" id="calc-label">จำนวนเงิน</span>
+      <button type="button" class="calc-sheet-close" id="btn-calc-close" aria-label="ปิดเครื่องคิดเลข">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
     <div class="calc-display" id="calc-display">0</div>
     <div class="calc-grid">
-      <button class="calc-btn" data-calc="7">7</button>
-      <button class="calc-btn" data-calc="8">8</button>
-      <button class="calc-btn" data-calc="9">9</button>
-      <button class="calc-btn calc-op" data-calc="⌫">⌫</button>
+      <button type="button" class="calc-btn calc-action" data-calc="C" title="ล้าง">C</button>
+      <button type="button" class="calc-btn calc-action" data-calc="⌫" title="ลบ" aria-label="ลบตัวสุดท้าย">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg>
+      </button>
+      <button type="button" class="calc-btn calc-op" data-calc="÷">÷</button>
+      <button type="button" class="calc-btn calc-op" data-calc="×">×</button>
 
-      <button class="calc-btn" data-calc="4">4</button>
-      <button class="calc-btn" data-calc="5">5</button>
-      <button class="calc-btn" data-calc="6">6</button>
-      <button class="calc-btn calc-op" data-calc="×">×</button>
+      <button type="button" class="calc-btn" data-calc="7">7</button>
+      <button type="button" class="calc-btn" data-calc="8">8</button>
+      <button type="button" class="calc-btn" data-calc="9">9</button>
+      <button type="button" class="calc-btn calc-op" data-calc="-">−</button>
 
-      <button class="calc-btn" data-calc="1">1</button>
-      <button class="calc-btn" data-calc="2">2</button>
-      <button class="calc-btn" data-calc="3">3</button>
-      <button class="calc-btn calc-op" data-calc="-">−</button>
+      <button type="button" class="calc-btn" data-calc="4">4</button>
+      <button type="button" class="calc-btn" data-calc="5">5</button>
+      <button type="button" class="calc-btn" data-calc="6">6</button>
+      <button type="button" class="calc-btn calc-op" data-calc="+">+</button>
 
-      <button class="calc-btn" data-calc=".">.</button>
-      <button class="calc-btn" data-calc="0">0</button>
-      <button class="calc-btn calc-op" data-calc="+">+</button>
-      <button class="calc-btn calc-ok" data-calc="✓">✓</button>
+      <button type="button" class="calc-btn" data-calc="1">1</button>
+      <button type="button" class="calc-btn" data-calc="2">2</button>
+      <button type="button" class="calc-btn" data-calc="3">3</button>
+      <button type="button" class="calc-btn calc-ok" data-calc="✓">✓</button>
+
+      <button type="button" class="calc-btn calc-zero" data-calc="0">0</button>
+      <button type="button" class="calc-btn" data-calc=".">.</button>
     </div>
   </div>
 </div>
