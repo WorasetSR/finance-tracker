@@ -419,13 +419,21 @@ export async function pullAllFromSupabase(store) {
       }
     }
 
-    // 1. Safe Reconcile transactions: Never delete active local data! Upload if missing from cloud.
+    // Get pending operations from sync queue to know what local items are legitimately unsynced
+    const pendingQueue = await store.getPendingQueue().catch(() => []);
+    const pendingItemIds = new Set(pendingQueue.map(q => q.id));
+
+    // 1. Safe Reconcile transactions:
+    // - If created/updated offline (synced === false or in pending queue): upload to cloud
+    // - Else if already synced previously (synced === true): deleted remotely, hardDelete locally
     const remoteTxIds = new Set(txRows.map(r => r.id));
     const localTxs = await store.getAllRaw('transactions');
     for (const ltx of localTxs) {
       if (!remoteTxIds.has(ltx.id)) {
-        if (!ltx.deletedAt) {
+        if (!ltx.deletedAt && (ltx.synced === false || pendingItemIds.has(ltx.id))) {
           syncTransaction(ltx).catch(console.error);
+        } else if (ltx.synced === true) {
+          await store.hardDelete('transactions', ltx.id);
         }
       }
     }
@@ -433,14 +441,19 @@ export async function pullAllFromSupabase(store) {
       await store.put('transactions', fromTxRow(r));
     }
 
-    // 2. Safe Reconcile accounts
+    // 2. Safe Reconcile accounts:
     if (accRows.length > 0) {
+      const defaultAccIds = new Set(['acc_cash', 'acc_bank']);
       const remoteAccIds = new Set(accRows.map(r => r.id));
       const localAccs = await store.getAllRaw('accounts');
       for (const lacc of localAccs) {
         if (!remoteAccIds.has(lacc.id)) {
-          if (!lacc.deletedAt) {
+          if (defaultAccIds.has(lacc.id) && !pendingItemIds.has(lacc.id)) {
+            await store.hardDelete('accounts', lacc.id);
+          } else if (!lacc.deletedAt && (lacc.synced === false || pendingItemIds.has(lacc.id))) {
             syncAccount(lacc).catch(console.error);
+          } else if (lacc.synced === true) {
+            await store.hardDelete('accounts', lacc.id);
           }
         }
       }
@@ -449,14 +462,23 @@ export async function pullAllFromSupabase(store) {
       }
     }
 
-    // 3. Safe Reconcile categories
+    // 3. Safe Reconcile categories:
     if (catRows.length > 0) {
+      const defaultCatIds = new Set([
+        'cat_food', 'cat_travel', 'cat_shopping', 'cat_health', 'cat_entertain',
+        'cat_housing', 'cat_education', 'cat_other_exp', 'cat_salary', 'cat_freelance',
+        'cat_invest', 'cat_other_inc'
+      ]);
       const remoteCatIds = new Set(catRows.map(r => r.id));
       const localCats = await store.getAllRaw('categories');
       for (const lcat of localCats) {
         if (!remoteCatIds.has(lcat.id)) {
-          if (!lcat.deletedAt) {
+          if (defaultCatIds.has(lcat.id) && !pendingItemIds.has(lcat.id)) {
+            await store.hardDelete('categories', lcat.id);
+          } else if (!lcat.deletedAt && (lcat.synced === false || pendingItemIds.has(lcat.id))) {
             syncCategory(lcat).catch(console.error);
+          } else if (lcat.synced === true) {
+            await store.hardDelete('categories', lcat.id);
           }
         }
       }
@@ -465,14 +487,16 @@ export async function pullAllFromSupabase(store) {
       }
     }
 
-    // 4. Safe Reconcile budgets
+    // 4. Safe Reconcile budgets:
     if (bgtRows.length > 0) {
       const remoteBgtIds = new Set(bgtRows.map(r => r.id));
       const localBgts = await store.getAllRaw('budgets');
       for (const lbgt of localBgts) {
         if (!remoteBgtIds.has(lbgt.id)) {
-          if (!lbgt.deletedAt) {
+          if (!lbgt.deletedAt && (lbgt.synced === false || pendingItemIds.has(lbgt.id))) {
             syncBudget(lbgt).catch(console.error);
+          } else if (lbgt.synced === true) {
+            await store.hardDelete('budgets', lbgt.id);
           }
         }
       }

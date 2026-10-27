@@ -5,6 +5,7 @@
 
 import { formatTHB } from '../format.js';
 import { renderIcon } from '../icons.js';
+import { syncAccount } from '../supabase-client.js';
 
 const ORDER_KEY = 'ft_account_order';
 
@@ -238,8 +239,10 @@ export async function initAccounts(container, store, { showToast }) {
       btn.addEventListener('click', async () => {
         const acc = await store.get('accounts', btn.dataset.accountId);
         if (!acc) return;
-        Object.assign(acc, { archived: false, updatedAt: new Date().toISOString(), synced: false });
+        Object.assign(acc, { archived: false, updatedAt: new Date().toISOString(), synced: true });
         await store.put('accounts', acc);
+        await store.addToPendingQueue({ id: acc.id, store: 'accounts', op: 'update' });
+        syncAccount(acc).catch(console.error);
         showToast('กู้คืนบัญชีแล้ว');
         render();
       });

@@ -375,15 +375,26 @@ async function doSync() {
 }
 
 let _isPulling = false;
+let _lastAutoPullTime = 0;
+const AUTO_PULL_THROTTLE_MS = 25000; // at least 25s between auto-pulls
+
 async function pullLatestIfVisible() {
+  const now = Date.now();
   if (_isPulling || !isSupabaseConfigured()) return;
+  if (now - _lastAutoPullTime < AUTO_PULL_THROTTLE_MS) return;
+
   _isPulling = true;
+  _lastAutoPullTime = now;
   try {
     updateSyncWidget('syncing');
     const result = await pullAllFromSupabase(store);
     if (result.ok) {
       updateSyncWidget('synced');
-      refreshPage();
+      // Only refresh page if no modal is currently open to avoid blowing away active user input
+      const anyModalOpen = document.querySelector('.modal-overlay:not(.hidden)');
+      if (!anyModalOpen) {
+        refreshPage();
+      }
     } else {
       updateSyncWidget('error');
     }
@@ -944,6 +955,9 @@ let currentSlipType = 'expense';
 let _onSlipItemReady = null;
 let _slipPipelineCancelled = false;
 let _backgroundPipelineRunning = false;
+let _slipAbortController = null;
+let _slipPipelineId = 0;
+let _savedSlipCount = 0;
 
 function revokeCurrentThumb() {
   if (currentThumbUrl) {
@@ -966,7 +980,16 @@ function cleanupSlipQueueThumbs() {
 
 function resetSlipModalState() {
   _slipPipelineCancelled = true;
+  _slipPipelineId++;
+  if (_slipAbortController) {
+    try { _slipAbortController.abort(); } catch (_) {}
+    _slipAbortController = null;
+  }
+  if (typeof _onSlipItemReady === 'function') {
+    try { _onSlipItemReady(null); } catch (_) {}
+  }
   _onSlipItemReady = null;
+  _savedSlipCount = 0;
   cleanupSlipQueueThumbs();
   slipQueue = [];
   currentSlipIndex = 0;
@@ -1270,6 +1293,9 @@ document.getElementById('slip-lightbox')?.addEventListener('click', (e) => {
 async function handleSlipFiles(files) {
   if (!files || !files.length) return;
 
+  // Clone FileList into a permanent array immediately before clearing input value!
+  const filesArray = Array.from(files);
+
   const apiKey = getGeminiKey();
   if (!apiKey) {
     showToast('กรุณาระบุ Gemini API Key ในหน้าตั้งค่าก่อนสแกนสลิป', 'error');
@@ -1282,7 +1308,12 @@ async function handleSlipFiles(files) {
   openModal('slip-modal');
 
   _slipPipelineCancelled = false;
-  slipQueue = Array.from(files).map((file, idx) => ({
+  const runId = ++_slipPipelineId;
+  const abortCtrl = new AbortController();
+  _slipAbortController = abortCtrl;
+  _savedSlipCount = 0;
+
+  slipQueue = filesArray.map((file, idx) => ({
     file,
     index: idx,
     status: 'pending', // 'pending' | 'compressing' | 'parsing' | 'ready' | 'error'
@@ -1294,19 +1325,18 @@ async function handleSlipFiles(files) {
   currentSlipIndex = 0;
 
   // Start background parsing pipeline
-  startBackgroundSlipPipeline(apiKey);
+  startBackgroundSlipPipeline(apiKey, runId, abortCtrl.signal);
 
   // Display the first slip
   await displaySlipAtCurrentIndex();
 }
 
-async function startBackgroundSlipPipeline(apiKey) {
-  if (_backgroundPipelineRunning) return;
+async function startBackgroundSlipPipeline(apiKey, runId, abortSignal) {
   _backgroundPipelineRunning = true;
 
   try {
     for (let i = 0; i < slipQueue.length; i++) {
-      if (_slipPipelineCancelled) break;
+      if (_slipPipelineCancelled || runId !== _slipPipelineId || abortSignal?.aborted) break;
       const item = slipQueue[i];
       if (!item || item.status !== 'pending') continue;
 
@@ -1314,7 +1344,7 @@ async function startBackgroundSlipPipeline(apiKey) {
       item.status = 'compressing';
       try {
         item.compressedBlob = await compressImage(item.file, 1280, 0.82);
-        if (_slipPipelineCancelled) break;
+        if (_slipPipelineCancelled || runId !== _slipPipelineId || abortSignal?.aborted) break;
         item.thumbUrl = URL.createObjectURL(item.compressedBlob);
       } catch (compErr) {
         console.warn('Compression error, fallback to raw file:', compErr);
@@ -1325,13 +1355,13 @@ async function startBackgroundSlipPipeline(apiKey) {
       // 2. Parse slip with Gemini Flash
       item.status = 'parsing';
       try {
-        const parsed = await parseSlipImage(item.compressedBlob, apiKey);
-        if (_slipPipelineCancelled) break;
+        const parsed = await parseSlipImage(item.compressedBlob, apiKey, abortSignal);
+        if (_slipPipelineCancelled || runId !== _slipPipelineId || abortSignal?.aborted) break;
         item.parsed = parsed;
         item.status = 'ready';
       } catch (parseErr) {
+        if (_slipPipelineCancelled || runId !== _slipPipelineId || abortSignal?.aborted) break;
         console.error(`Slip #${i + 1} parse error:`, parseErr);
-        if (_slipPipelineCancelled) break;
         item.error = parseErr.message;
         item.parsed = {
           amountMinor: 0,
@@ -1351,12 +1381,14 @@ async function startBackgroundSlipPipeline(apiKey) {
       }
 
       // Small pause between background slips to avoid network spikes
-      if (i < slipQueue.length - 1 && !_slipPipelineCancelled) {
+      if (i < slipQueue.length - 1 && !_slipPipelineCancelled && runId === _slipPipelineId) {
         await new Promise(r => setTimeout(r, 300));
       }
     }
   } finally {
-    _backgroundPipelineRunning = false;
+    if (runId === _slipPipelineId) {
+      _backgroundPipelineRunning = false;
+    }
   }
 }
 
@@ -1368,7 +1400,11 @@ async function displaySlipAtCurrentIndex() {
     if (currentSlipIndex >= slipQueue.length) {
       cleanupSlipQueueThumbs();
       closeModal('slip-modal');
-      showToast(`สแกนและบันทึกสลิปเรียบร้อย (${slipQueue.length} ใบ)`);
+      if (_savedSlipCount > 0) {
+        showToast(`สแกนและบันทึกสลิปเรียบร้อย (${_savedSlipCount} ใบ)`);
+      } else {
+        showToast('สิ้นสุดรายการสลิป');
+      }
       refreshPage();
       return;
     }
@@ -1404,7 +1440,7 @@ async function displaySlipAtCurrentIndex() {
 
       await new Promise(resolve => {
         _onSlipItemReady = (readyItem) => {
-          if (readyItem && readyItem.index === currentSlipIndex) {
+          if (!readyItem || readyItem.index === currentSlipIndex) {
             _onSlipItemReady = null;
             resolve();
           }
@@ -1612,8 +1648,11 @@ document.getElementById('slip-confirm-form')?.addEventListener('submit', async (
     }
   }
 
+  _savedSlipCount++;
   updateSyncWidget('synced');
-  showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว`);
+  if (slipQueue.length > 1) {
+    showToast(`บันทึกสลิปใบที่ ${currentSlipIndex + 1} แล้ว`);
+  }
 
   currentSlipIndex++;
   await displaySlipAtCurrentIndex();
@@ -2801,6 +2840,14 @@ function closeModal(id) {
   document.body.style.overflow = '';
   if (id === 'slip-modal') {
     _slipPipelineCancelled = true;
+    _slipPipelineId++;
+    if (_slipAbortController) {
+      try { _slipAbortController.abort(); } catch (_) {}
+      _slipAbortController = null;
+    }
+    if (typeof _onSlipItemReady === 'function') {
+      try { _onSlipItemReady(null); } catch (_) {}
+    }
     _onSlipItemReady = null;
     cleanupSlipQueueThumbs();
     isProcessingSlip = false;
@@ -2810,15 +2857,7 @@ function closeModal(id) {
 
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.add('hidden');
-    document.body.style.overflow = '';
-    if (e.target.id === 'slip-modal') {
-      _slipPipelineCancelled = true;
-      _onSlipItemReady = null;
-      cleanupSlipQueueThumbs();
-      isProcessingSlip = false;
-      document.getElementById('slip-lightbox')?.classList.add('hidden');
-    }
+    closeModal(e.target.id);
     return;
   }
   const closeBtn = e.target.closest('[data-close]');
@@ -2835,15 +2874,8 @@ document.addEventListener('keydown', (e) => {
       return;
     }
     document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => {
-      m.classList.add('hidden');
-      if (m.id === 'slip-modal') {
-        _slipPipelineCancelled = true;
-        _onSlipItemReady = null;
-        cleanupSlipQueueThumbs();
-        isProcessingSlip = false;
-      }
+      closeModal(m.id);
     });
-    document.body.style.overflow = '';
   }
 });
 
@@ -2993,7 +3025,7 @@ function hideCalc() {
 
 function handleCalcInputKey(key) {
   const display = document.getElementById('calc-display');
-  const ops = ['+', '-', '×', 'x', '*'];
+  const ops = ['+', '-', '×', 'x', '*', '÷', '/'];
 
   if (key === '⌫' || key === 'Backspace') {
     _calcExpr = _calcExpr.slice(0, -1);
@@ -3013,7 +3045,7 @@ function handleCalcInputKey(key) {
     return;
   } else {
     const isOp = ops.includes(key);
-    const normalizedKey = (key === 'x' || key === '*') ? '×' : key;
+    const normalizedKey = (key === 'x' || key === '*') ? '×' : (key === '/' ? '÷' : key);
 
     if (_calcFresh) {
       if (isOp) {
@@ -3025,13 +3057,18 @@ function handleCalcInputKey(key) {
       }
       _calcFresh = false;
     } else if (isOp) {
-      if (['+', '-', '×'].includes(_calcExpr.slice(-1))) {
+      if (['+', '-', '×', '÷'].includes(_calcExpr.slice(-1))) {
         _calcExpr = _calcExpr.slice(0, -1) + normalizedKey;
       } else {
         _calcExpr += normalizedKey;
       }
     } else if (key === '.') {
-      const lastOp = Math.max(_calcExpr.lastIndexOf('+'), _calcExpr.lastIndexOf('-'), _calcExpr.lastIndexOf('×'));
+      const lastOp = Math.max(
+        _calcExpr.lastIndexOf('+'),
+        _calcExpr.lastIndexOf('-'),
+        _calcExpr.lastIndexOf('×'),
+        _calcExpr.lastIndexOf('÷')
+      );
       const curOperand = lastOp >= 0 ? _calcExpr.slice(lastOp + 1) : _calcExpr;
       if (curOperand.includes('.')) return;
       if (!curOperand) {
@@ -3076,7 +3113,7 @@ window.addEventListener('keydown', e => {
     handleCalcInputKey('.');
   } else if (['+', '-', '*', '/'].includes(e.key)) {
     e.preventDefault();
-    handleCalcInputKey(e.key === '*' || e.key === '/' ? '×' : e.key);
+    handleCalcInputKey(e.key === '*' ? '×' : (e.key === '/' ? '÷' : e.key));
   } else if (e.key === 'Backspace') {
     e.preventDefault();
     handleCalcInputKey('⌫');

@@ -157,11 +157,32 @@ export function blobToBase64(blob) {
   });
 }
 
+function makeTimeoutSignal(timeoutMs, externalSignal) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new DOMException('TimeoutError', 'TimeoutError'));
+  }, timeoutMs);
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      clearTimeout(timeoutId);
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener('abort', () => {
+        clearTimeout(timeoutId);
+        controller.abort(externalSignal.reason);
+      }, { once: true });
+    }
+  }
+  return { signal: controller.signal, cleanup: () => clearTimeout(timeoutId) };
+}
+
 /**
  * Parse a Thai bank slip image using Google Gemini Flash Vision API.
  *
  * @param {File|Blob} imageFile
  * @param {string} apiKey
+ * @param {AbortSignal} [signal] Optional abort signal for cancellation
  * @returns {Promise<{
  *   amountMinor: number,
  *   date: string,
@@ -172,7 +193,7 @@ export function blobToBase64(blob) {
  *   payeeAccount: string
  * }>}
  */
-export async function parseSlipImage(imageFile, apiKey) {
+export async function parseSlipImage(imageFile, apiKey, signal = null) {
   if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
     throw new Error('ยังไม่ได้ตั้งค่า Gemini API Key — กรุณาใส่ API Key ฟรีในหน้าตั้งค่า');
   }
@@ -223,13 +244,17 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
     const maxAttempts = 2;
 
     while (attempts < maxAttempts) {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       attempts++;
+      const { signal: fetchSignal, cleanup } = makeTimeoutSignal(30000, signal);
       try {
         response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(30000),
+          signal: fetchSignal,
         });
 
         if (response.ok) {
@@ -260,11 +285,14 @@ Extract the transaction data and return ONLY a raw JSON object (without markdown
           throw new Error(`Gemini API Error: ${lastErrorMsg} (กรุณาตรวจสอบ API Key)`);
         }
       } catch (err) {
+        if (signal?.aborted || err.name === 'AbortError') throw err;
         if (err.message.includes('API Key')) throw err;
         lastErrorMsg = err.message;
-        if (err.name === 'TimeoutError' || err.message?.includes('aborted')) {
+        if (err.name === 'TimeoutError' || err.message?.includes('Timeout')) {
           lastErrorMsg = 'การเชื่อมต่อใช้เวลานานเกินไป (Timeout 30s)';
         }
+      } finally {
+        cleanup();
       }
     }
 
